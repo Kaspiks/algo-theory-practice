@@ -17,18 +17,21 @@ export interface AutoDiagramLayout {
   nodes: Record<StateId, DiagramNodeBox>;
 }
 
-const GAP_X = 56;
-const GAP_Y = 28;
-const MARGIN = 48;
+/** Horizontal gap between layer midlines (edge of one column to next). */
+const GAP_X = 112;
+const GAP_Y = 48;
+const MARGIN = 72;
+/** Minimum horizontal space reserved per layer (even if nodes are smaller). */
+const MIN_COL_WIDTH = 100;
 
 function nodeBoxSize(
   label: string,
   size: 'embedded' | 'expanded'
 ): { w: number; h: number } {
-  const charW = size === 'expanded' ? 10.2 : 8;
-  const h = size === 'expanded' ? 44 : 34;
-  const padX = size === 'expanded' ? 32 : 24;
-  const minW = size === 'expanded' ? 80 : 64;
+  const charW = size === 'expanded' ? 10.2 : 8.2;
+  const h = size === 'expanded' ? 48 : 38;
+  const padX = size === 'expanded' ? 36 : 28;
+  const minW = size === 'expanded' ? 96 : 72;
   const w = Math.max(minW, Math.ceil(label.length * charW) + padX);
   return { w, h };
 }
@@ -48,11 +51,8 @@ function buildAdjacency(machine: TuringMachineDefinition): Map<StateId, Set<Stat
   return m;
 }
 
-/**
- * Layer states left → right: start on the left, accept/reject on the right,
- * BFS distance for intermediates. Unreachable states sit in a middle band.
- */
-function assignLayers(machine: TuringMachineDefinition): Map<StateId, number> {
+/** Shortest path length from `machine.start` to each reachable state. */
+function bfsDistanceFromStart(machine: TuringMachineDefinition): Map<StateId, number> {
   const adj = buildAdjacency(machine);
   const dist = new Map<StateId, number>();
   const q: StateId[] = [];
@@ -63,60 +63,126 @@ function assignLayers(machine: TuringMachineDefinition): Map<StateId, number> {
   let head = 0;
   while (head < q.length) {
     const u = q[head++]!;
-    const d = dist.get(u) ?? 0;
+    const d = dist.get(u)!;
     for (const v of adj.get(u) ?? []) {
-      if (!dist.has(v) || dist.get(v)! > d + 1) {
+      if (!dist.has(v)) {
         dist.set(v, d + 1);
         q.push(v);
       }
     }
   }
+  return dist;
+}
 
-  let maxD = 0;
-  for (const v of dist.values()) maxD = Math.max(maxD, v);
+/**
+ * Left → right Sugiyama-style columns:
+ * - Column 0: start only
+ * - Columns 1..k: each non-terminal state uses BFS distance from start as its column index
+ *   (states at the same distance share a column, stacked vertically)
+ * - Last column: accept and reject together (always rightmost)
+ *
+ * Unreachable non-terminals: column 1. Unreachable terminals: still in the terminal column.
+ */
+export function assignLayersForLayout(
+  machine: TuringMachineDefinition
+): Map<StateId, number> {
+  const dist = bfsDistanceFromStart(machine);
+  const { start, accept, reject, states } = machine;
+  const terminalIds = new Set<StateId>(
+    [accept, reject].filter((t) => states.includes(t))
+  );
+  const intermediates = states.filter((s) => s !== start && !terminalIds.has(s));
 
-  for (const s of machine.states) {
-    if (!dist.has(s)) {
-      dist.set(s, Math.max(1, Math.ceil(maxD / 2)));
-    }
+  const rawCol = new Map<StateId, number>();
+  rawCol.set(start, 0);
+
+  let maxInterCol = 0;
+  for (const s of intermediates) {
+    const d = dist.has(s) ? dist.get(s)! : 1;
+    const col = Math.max(1, d);
+    rawCol.set(s, col);
+    maxInterCol = Math.max(maxInterCol, col);
   }
 
-  maxD = 0;
-  for (const v of dist.values()) maxD = Math.max(maxD, v);
-
-  const rightCol = maxD + 1;
-  if (machine.states.includes(machine.accept)) {
-    dist.set(
-      machine.accept,
-      Math.max(dist.get(machine.accept) ?? 0, rightCol)
-    );
-  }
-  if (machine.states.includes(machine.reject)) {
-    dist.set(
-      machine.reject,
-      Math.max(dist.get(machine.reject) ?? 0, rightCol)
-    );
+  const termCol = maxInterCol + 1;
+  for (const t of terminalIds) {
+    rawCol.set(t, termCol);
   }
 
-  let maxL = 0;
-  for (const v of dist.values()) maxL = Math.max(maxL, v);
-
+  const sortedCols = [...new Set(rawCol.values())].sort((a, b) => a - b);
   const compress = new Map<number, number>();
-  const sortedLayers = [...new Set(dist.values())].sort((a, b) => a - b);
-  sortedLayers.forEach((L, i) => compress.set(L, i));
+  sortedCols.forEach((c, i) => compress.set(c, i));
 
   const out = new Map<StateId, number>();
-  for (const s of machine.states) {
-    out.set(s, compress.get(dist.get(s) ?? 0) ?? 0);
+  for (const s of states) {
+    const r = rawCol.get(s);
+    out.set(s, compress.get(r ?? 0) ?? 0);
   }
   return out;
+}
+
+/** Shift all node centers so the bounding box of node rects is centered at (0,0). */
+function centerLayoutOnBBox(
+  nodes: Record<StateId, DiagramNodeBox>,
+  machine: TuringMachineDefinition
+): void {
+  let minL = Infinity;
+  let maxR = -Infinity;
+  let minT = Infinity;
+  let maxB = -Infinity;
+  for (const s of machine.states) {
+    const n = nodes[s];
+    if (!n) continue;
+    minL = Math.min(minL, n.cx - n.w / 2);
+    maxR = Math.max(maxR, n.cx + n.w / 2);
+    minT = Math.min(minT, n.cy - n.h / 2);
+    maxB = Math.max(maxB, n.cy + n.h / 2);
+  }
+  if (!Number.isFinite(minL)) return;
+  const bx = (minL + maxR) / 2;
+  const by = (minT + maxB) / 2;
+  for (const s of machine.states) {
+    const n = nodes[s];
+    if (!n) continue;
+    n.cx -= bx;
+    n.cy -= by;
+  }
+}
+
+function assertNoOverlaps(
+  nodes: Record<StateId, DiagramNodeBox>,
+  machine: TuringMachineDefinition
+): void {
+  if (!import.meta.env?.DEV) return;
+  const list = machine.states
+    .map((s) => ({ s, n: nodes[s] }))
+    .filter((x): x is { s: StateId; n: DiagramNodeBox } => Boolean(x.n));
+  const margin = 4;
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      const a = list[i]!.n;
+      const b = list[j]!.n;
+      const sepX =
+        Math.abs(a.cx - b.cx) - (a.w + b.w) / 2 - margin;
+      const sepY =
+        Math.abs(a.cy - b.cy) - (a.h + b.h) / 2 - margin;
+      if (sepX < 0 && sepY < 0) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[diagramLayout] Node overlap: ${list[i]!.s} vs ${list[j]!.s}`,
+          list[i]!.n,
+          list[j]!.n
+        );
+      }
+    }
+  }
 }
 
 export function computeAutoLayout(
   machine: TuringMachineDefinition,
   size: 'embedded' | 'expanded'
 ): AutoDiagramLayout {
-  const layers = assignLayers(machine);
+  const layers = assignLayersForLayout(machine);
   const maxLayer = Math.max(0, ...layers.values());
 
   const byLayer = new Map<number, StateId[]>();
@@ -134,10 +200,10 @@ export function computeAutoLayout(
   const colWidth: number[] = [];
   const colMaxH: number[] = [];
   for (let L = 0; L <= maxLayer; L++) {
-    const nodes = byLayer.get(L) ?? [];
-    let mw = 0;
+    const ids = byLayer.get(L) ?? [];
+    let mw = MIN_COL_WIDTH;
     let mh = 0;
-    for (const s of nodes) {
+    for (const s of ids) {
       const { w, h } = nodeBoxSize(s, size);
       mw = Math.max(mw, w);
       mh = Math.max(mh, h);
@@ -146,11 +212,11 @@ export function computeAutoLayout(
     colMaxH.push(mh);
   }
 
-  const colCenterX: number[] = [];
+  const colLeftX: number[] = [];
   let x = MARGIN;
   for (let L = 0; L <= maxLayer; L++) {
-    const cw = colWidth[L] ?? 80;
-    colCenterX.push(x + cw / 2);
+    const cw = colWidth[L] ?? MIN_COL_WIDTH;
+    colLeftX.push(x);
     x += cw + GAP_X;
   }
 
@@ -160,18 +226,22 @@ export function computeAutoLayout(
     const ids = byLayer.get(L) ?? [];
     const n = ids.length;
     if (n === 0) continue;
-    const maxH = colMaxH[L] ?? 34;
+    const left = colLeftX[L] ?? MARGIN;
+    const cw = colWidth[L] ?? MIN_COL_WIDTH;
+    const colCenterX = left + cw / 2;
+    const maxH = colMaxH[L] ?? 38;
     const pitch = maxH + GAP_Y;
-    const totalH = (n - 1) * pitch;
+    const totalH = n > 1 ? (n - 1) * pitch : 0;
     const yStart = -totalH / 2;
     for (let i = 0; i < n; i++) {
       const s = ids[i]!;
       const { w, h } = nodeBoxSize(s, size);
-      const cx = colCenterX[L] ?? MARGIN;
-      const cy = yStart + i * pitch;
-      nodes[s] = { cx, cy, w, h };
+      nodes[s] = { cx: colCenterX, cy: yStart + i * pitch, w, h };
     }
   }
+
+  centerLayoutOnBBox(nodes, machine);
+  assertNoOverlaps(nodes, machine);
 
   return { nodes };
 }
@@ -189,7 +259,7 @@ export function computeDiagramViewBox(
     const n = nodes[s];
     if (!n) continue;
     const term = s === machine.accept || s === machine.reject;
-    const pad = term ? 18 : 10;
+    const pad = term ? 22 : 12;
     minX = Math.min(minX, n.cx - n.w / 2 - pad);
     maxX = Math.max(maxX, n.cx + n.w / 2 + pad);
     minY = Math.min(minY, n.cy - n.h / 2 - pad);
@@ -217,18 +287,27 @@ export function resolveDiagramNodes(
   return computeAutoLayout(machine, size).nodes;
 }
 
-/** Legacy circle-only positions → centered boxes (fallback). */
+/**
+ * Legacy positions → boxes. Missing states get auto layout merged in so every
+ * state has a unique position (avoids invisible / collapsed nodes).
+ */
 export function boxesFromLegacyLayout(
   layout: LegacyDiagramPositions,
   machine: TuringMachineDefinition,
   size: 'embedded' | 'expanded'
 ): AutoDiagramLayout {
+  const auto = computeAutoLayout(machine, size);
   const nodes: Record<StateId, DiagramNodeBox> = {};
   for (const s of machine.states) {
     const p = layout.positions[s];
-    if (!p) continue;
-    const { w, h } = nodeBoxSize(s, size);
-    nodes[s] = { cx: p.x, cy: p.y, w, h };
+    if (p) {
+      const { w, h } = nodeBoxSize(s, size);
+      nodes[s] = { cx: p.x, cy: p.y, w, h };
+    } else {
+      nodes[s] = { ...auto.nodes[s]! };
+    }
   }
+  centerLayoutOnBBox(nodes, machine);
+  assertNoOverlaps(nodes, machine);
   return { nodes };
 }

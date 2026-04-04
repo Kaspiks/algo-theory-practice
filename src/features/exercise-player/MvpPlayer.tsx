@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StateDiagramExpandable } from '@/components/tm/StateDiagramViewer';
-import type { DiagramLayout } from '@/components/tm/StateDiagramViewer';
 import { TapeViewer } from '@/components/tm/TapeViewer';
 import { HINT_TEXT } from '@/content/hints';
 import { FeedbackPanel } from '@/features/exercise-player/FeedbackPanel';
@@ -28,19 +27,6 @@ import type {
   TransitionFired,
   TuringMachineDefinition,
 } from '@/types/tm';
-
-const SCAN_LAYOUT: DiagramLayout = {
-  positions: {
-    q0: { x: 70, y: 110 },
-    q_accept: { x: 260, y: 70 },
-    q_reject: { x: 260, y: 150 },
-  },
-};
-
-function layoutForMachine(id: string): DiagramLayout | undefined {
-  if (id === 'mvp_scan_binary') return SCAN_LAYOUT;
-  return undefined;
-}
 
 function tapeCharLabel(m: TuringMachineDefinition, s: string): string {
   if (s !== m.blank) return s;
@@ -709,7 +695,6 @@ export function MvpPlayer({
             pulseActiveTransitionEdge={visual.diagramPulseEdge}
             destinationHintState={visual.diagramDestinationHint}
             nextStateEntryPulse={visual.diagramNextStateEntryPulse}
-            layout={layoutForMachine(machine.id)}
           />
         </div>
         <div className="flex-1 space-y-4">
