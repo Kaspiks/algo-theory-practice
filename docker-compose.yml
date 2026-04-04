@@ -1,0 +1,29 @@
+# Default: development (Vite + hot reload on port 5173).
+# Production: docker compose --profile prod up --build  (nginx on port 8080)
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: algo-theory-dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      # Improves file watch reliability on some Docker Desktop / VM setups
+      CHOKIDAR_USEPOLLING: "true"
+    stdin_open: true
+    tty: true
+
+  prod:
+    profiles:
+      - prod
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: algo-theory-prod
+    ports:
+      - "8080:80"

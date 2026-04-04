@@ -1,0 +1,16 @@
+# Development: Vite dev server with hot reload.
+# Source is expected from a bind mount (see docker-compose.yml).
+
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+ENV NODE_ENV=development
+
+EXPOSE 5173
+
+# Bind on all interfaces so the port is reachable from the host.
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]

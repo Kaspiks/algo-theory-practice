@@ -1,0 +1,18 @@
+# Dependencies & build
+node_modules/
+dist/
+
+# Local / editor
+.DS_Store
+.cursor/
+
+# Env
+.env
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Vitest
+coverage/

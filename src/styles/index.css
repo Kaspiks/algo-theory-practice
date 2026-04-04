@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes tm-diagram-edge-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    filter: drop-shadow(0 0 2px rgb(250 204 21 / 0.35));
+  }
+  50% {
+    opacity: 0.82;
+    filter: drop-shadow(0 0 9px rgb(253 224 71 / 0.55));
+  }
+}
+
+.tm-diagram-edge-pulse {
+  animation: tm-diagram-edge-pulse 1.35s ease-in-out infinite;
+}
+
+@keyframes tm-node-destination-hint {
+  0%,
+  100% {
+    stroke-opacity: 0.45;
+  }
+  50% {
+    stroke-opacity: 0.95;
+  }
+}
+
+.tm-node-destination-hint {
+  animation: tm-node-destination-hint 1.25s ease-in-out infinite;
+}
+
+@keyframes tm-node-state-entry {
+  0%,
+  100% {
+    stroke-opacity: 0.75;
+  }
+  50% {
+    stroke-opacity: 1;
+  }
+}
+
+.tm-node-state-entry {
+  animation: tm-node-state-entry 1.1s ease-in-out 2;
+}
+
+@keyframes tm-tape-write-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(56 189 248 / 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgb(56 189 248 / 0.2);
+  }
+}
+
+.tm-tape-write-pulse {
+  animation: tm-tape-write-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes tm-tape-head-pulse {
+  0%,
+  100% {
+    border-color: rgb(251 191 36 / 0.55);
+  }
+  50% {
+    border-color: rgb(253 224 71 / 0.95);
+  }
+}
+
+.tm-tape-head-move-pulse {
+  animation: tm-tape-head-pulse 1.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tm-diagram-edge-pulse,
+  .tm-node-destination-hint,
+  .tm-node-state-entry,
+  .tm-tape-write-pulse,
+  .tm-tape-head-move-pulse {
+    animation: none;
+  }
+}

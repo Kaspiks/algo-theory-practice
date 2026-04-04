@@ -1,0 +1,25 @@
+# Dependencies & build output
+node_modules
+dist
+
+# Git & editor
+.git
+.gitignore
+.cursor
+.vscode
+
+# Logs & local env
+*.log
+npm-debug.log*
+.env
+.env.*
+!.env.example
+
+# OS & misc
+.DS_Store
+coverage
+*.md
+!README.md
+
+# Tests (not needed for production image build)
+tests
