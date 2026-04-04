@@ -1,25 +1,43 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { StateDiagramExpandable } from '@/components/tm/StateDiagramViewer';
 import { TapeViewer } from '@/components/tm/TapeViewer';
 import { HINT_TEXT } from '@/content/hints';
 import { FeedbackPanel } from '@/features/exercise-player/FeedbackPanel';
 import { QuestionPanel } from '@/features/exercise-player/QuestionPanel';
+import { TapeResultQuestion } from '@/features/exercise-player/TapeResultQuestion';
 import {
   buildNextTransitionMcq,
   formatTransitionLabel,
   gradeNextTransition,
 } from '@/lib/grading/nextTransition';
+import {
+  buildTapeResultMcqForState,
+  buildTapeResultWrongMessage,
+  findMatchingTapeResultOptionId,
+  gradeTapeResult,
+} from '@/lib/grading/tapeResult';
 import { initialConfiguration, peekNextAnswer, step } from '@/lib/tm/engine';
 import {
+  ANIMATION_SPEED_ORDER,
+  ANIMATION_SPEED_TIMING,
   computePhaseSchedule,
-  PHASE_GAP_MS,
+  getAutoplayBetweenStepsMs,
+  getPhaseGapMs,
+  getPlaybackPreviewMs,
   phaseDurationsForMove,
   stepPhaseUiLabel,
+  type AnimationSpeed,
   type StepAnimPhase,
   tapeAfterWriteOnly,
 } from '@/lib/tm/stepAnimation';
 import { readSymbol } from '@/lib/tm/tape';
-import type { MvpExercise } from '@/types/mvp';
+import type { MvpExercise, TapeResultExercise } from '@/types/mvp';
 import type {
   HaltStatus,
   TMConfiguration,
@@ -87,18 +105,25 @@ export function MvpPlayer({
   const [hintsShown, setHintsShown] = useState(0);
 
   const [animateSteps, setAnimateSteps] = useState(playerMode === 'study');
-  const [animSpeed, setAnimSpeed] = useState<'slow' | 'normal' | 'fast'>(
-    'normal'
-  );
+  const [animSpeed, setAnimSpeed] = useState<AnimationSpeed>('normal');
   const [playing, setPlaying] = useState(false);
   const [stepAnim, setStepAnim] = useState<StepAnimationState | null>(null);
+  /** Playback-only: MCQ row that matches the engine’s next config before the step runs. */
+  const [previewCorrectOptionId, setPreviewCorrectOptionId] = useState<
+    string | null
+  >(null);
 
   const configRef = useRef(config);
   const machineRef = useRef(machine);
+  const exerciseRef = useRef(exercise);
+  const stepCountRef = useRef(stepCount);
   const animTimersRef = useRef<number[]>([]);
   const playTimerRef = useRef<number | null>(null);
+  const playbackPreviewTimerRef = useRef<number | null>(null);
   const animGenRef = useRef(0);
   const playingRef = useRef(false);
+  /** Prevents double commit before React updates config (correct submit / step / play). */
+  const commitStepLockRef = useRef(false);
   const runStepFromEngineRef = useRef<
     | ((
         result: ReturnType<typeof step>,
@@ -106,6 +131,9 @@ export function MvpPlayer({
       ) => void)
     | null
   >(null);
+  const runTapeResultPlaybackStepRef = useRef<
+    (r: ReturnType<typeof step>) => void
+  >(() => {});
 
   useEffect(() => {
     configRef.current = config;
@@ -114,8 +142,23 @@ export function MvpPlayer({
     machineRef.current = machine;
   }, [machine]);
   useEffect(() => {
+    exerciseRef.current = exercise;
+  }, [exercise]);
+  useEffect(() => {
+    stepCountRef.current = stepCount;
+  }, [stepCount]);
+  useEffect(() => {
     playingRef.current = playing;
   }, [playing]);
+
+  const animSpeedRef = useRef(animSpeed);
+  useEffect(() => {
+    animSpeedRef.current = animSpeed;
+  }, [animSpeed]);
+
+  useEffect(() => {
+    commitStepLockRef.current = false;
+  }, [config, stepCount]);
 
   useEffect(() => {
     setAnimateSteps(playerMode === 'study');
@@ -139,12 +182,20 @@ export function MvpPlayer({
     }
   }, []);
 
+  const clearPlaybackPreviewTimer = useCallback(() => {
+    if (playbackPreviewTimerRef.current != null) {
+      window.clearTimeout(playbackPreviewTimerRef.current);
+      playbackPreviewTimerRef.current = null;
+    }
+  }, []);
+
   useEffect(
     () => () => {
       clearAnimTimers();
       clearPlayTimer();
+      clearPlaybackPreviewTimer();
     },
-    [clearAnimTimers, clearPlayTimer]
+    [clearAnimTimers, clearPlayTimer, clearPlaybackPreviewTimer]
   );
 
   const halted = useMemo(
@@ -154,7 +205,12 @@ export function MvpPlayer({
 
   const isAnimating = stepAnim !== null;
 
+  const isTapeResultMode = exercise.mode === 'tape_result';
+
   const staticFirstMcq = useMemo(() => {
+    if (exercise.mode !== 'next_transition' && exercise.mode !== 'tracing') {
+      return null;
+    }
     if (stepCount !== 0) return null;
     if (!exercise.options?.length) return null;
     const expected = peekNextAnswer(machine, config);
@@ -163,24 +219,58 @@ export function MvpPlayer({
       options: exercise.options,
       expected,
     };
-  }, [stepCount, exercise.options, machine, config]);
+  }, [exercise, stepCount, machine, config]);
 
-  const mcq = useMemo(() => {
-    if (halted) return null;
+  const transitionMcq = useMemo(() => {
+    if (exercise.mode === 'tape_result' || halted) return null;
     if (staticFirstMcq) {
-      return staticFirstMcq;
+      const correctOptionId =
+        exercise.mode === 'next_transition' || exercise.mode === 'tracing'
+          ? exercise.correctOptionId ?? 'opt-correct'
+          : 'opt-correct';
+      return {
+        options: staticFirstMcq.options,
+        expected: staticFirstMcq.expected,
+        correctOptionId,
+      };
     }
-    return buildNextTransitionMcq(machine, config);
-  }, [machine, config, halted, staticFirstMcq]);
+    const built = buildNextTransitionMcq(machine, config);
+    if (!built) return null;
+    return {
+      options: built.options,
+      expected: built.expected,
+      correctOptionId: built.correctOptionId,
+    };
+  }, [exercise, halted, staticFirstMcq, machine, config]);
 
-  const options = mcq?.options ?? [];
+  const tapeResultMcq = useMemo(() => {
+    if (!isTapeResultMode || halted) return null;
+    const ex = exercise as TapeResultExercise;
+    const authored =
+      stepCount === 0 &&
+      ex.options &&
+      ex.options.length > 0 &&
+      ex.correctOptionId
+        ? { options: ex.options, correctOptionId: ex.correctOptionId }
+        : null;
+    return buildTapeResultMcqForState(machine, config, stepCount, authored);
+  }, [
+    isTapeResultMode,
+    halted,
+    machine,
+    config,
+    exercise,
+    stepCount,
+  ]);
+
+  const transitionOptions = transitionMcq?.options ?? [];
   const idToAnswer = useMemo(() => {
     const m = new Map<string, TransitionAnswer>();
-    for (const o of options) {
+    for (const o of transitionOptions) {
       m.set(o.id, o.answer);
     }
     return m;
-  }, [options]);
+  }, [transitionOptions]);
 
   const visual = useMemo(() => {
     if (!stepAnim) {
@@ -300,6 +390,7 @@ export function MvpPlayer({
       status: HaltStatus,
       feedbackOpts?: { variant?: 'success' | 'error'; message?: string }
     ) => {
+      setPreviewCorrectOptionId(null);
       setConfig(next);
       setLastFired(fired);
       setStepCount((n) => n + 1);
@@ -346,8 +437,12 @@ export function MvpPlayer({
         setPlaying(false);
         return;
       }
-      runStepFromEngineRef.current?.(r, { fromPlayback: true });
-    }, 200);
+      if (exerciseRef.current.mode === 'tape_result') {
+        runTapeResultPlaybackStepRef.current(r);
+      } else {
+        runStepFromEngineRef.current?.(r, { fromPlayback: true });
+      }
+    }, getAutoplayBetweenStepsMs(animSpeedRef.current));
   }, [clearPlayTimer]);
 
   const runStepFromEngine = useCallback(
@@ -372,7 +467,7 @@ export function MvpPlayer({
       const myGen = animGenRef.current;
       const before = configRef.current;
       const d = phaseDurationsForMove(animSpeed, fired.move);
-      const gap = PHASE_GAP_MS[animSpeed];
+      const gap = getPhaseGapMs(animSpeed);
       const { phaseStarts, totalMs } = computePhaseSchedule(d, gap);
 
       const arm = (delay: number, fn: () => void) => {
@@ -440,15 +535,108 @@ export function MvpPlayer({
 
   runStepFromEngineRef.current = runStepFromEngine;
 
+  const runTapeResultPlaybackStep = useCallback(
+    (r: ReturnType<typeof step>) => {
+      const m = machineRef.current;
+      const c = configRef.current;
+      const sc = stepCountRef.current;
+      const ex = exerciseRef.current;
+      if (ex.mode !== 'tape_result') {
+        runStepFromEngineRef.current?.(r, { fromPlayback: true });
+        return;
+      }
+      const tex = ex as TapeResultExercise;
+      const authored =
+        sc === 0 &&
+        tex.options &&
+        tex.options.length > 0 &&
+        tex.correctOptionId
+          ? { options: tex.options, correctOptionId: tex.correctOptionId }
+          : null;
+      const mcq = buildTapeResultMcqForState(m, c, sc, authored);
+      if (!mcq) {
+        console.error(
+          '[tape-result] Playback: could not build MCQ for current configuration.'
+        );
+        runStepFromEngineRef.current?.(r, { fromPlayback: true });
+        return;
+      }
+      const previewId = findMatchingTapeResultOptionId(
+        m,
+        mcq.options,
+        r.next
+      );
+      if (previewId == null) {
+        console.error(
+          '[tape-result] Playback: no MCQ option matches engine next configuration.'
+        );
+        runStepFromEngineRef.current?.(r, { fromPlayback: true });
+        return;
+      }
+      setPreviewCorrectOptionId(previewId);
+      clearPlaybackPreviewTimer();
+      playbackPreviewTimerRef.current = window.setTimeout(() => {
+        playbackPreviewTimerRef.current = null;
+        runStepFromEngineRef.current?.(r, { fromPlayback: true });
+      }, getPlaybackPreviewMs(animSpeedRef.current));
+    },
+    [clearPlaybackPreviewTimer]
+  );
+
+  useEffect(() => {
+    runTapeResultPlaybackStepRef.current = runTapeResultPlaybackStep;
+  }, [runTapeResultPlaybackStep]);
+
   const handleSubmit = () => {
-    if (!selectedId || halted || !mcq || isAnimating) return;
+    if (!selectedId || halted || isAnimating || commitStepLockRef.current) {
+      return;
+    }
+
+    if (isTapeResultMode) {
+      if (!tapeResultMcq) return;
+      const chosenCfg = tapeResultMcq.options.find(
+        (o) => o.id === selectedId
+      )?.resultingConfig;
+      const { correct, fired } = gradeTapeResult(
+        machine,
+        config,
+        chosenCfg
+      );
+      if (!fired) return;
+      if (correct) {
+        commitStepLockRef.current = true;
+        const result = step(machine, config);
+        if (!result.fired) {
+          commitStepLockRef.current = false;
+          return;
+        }
+        if (!animateSteps) {
+          applyStepResult(result.next, result.fired, result.status);
+          return;
+        }
+        runStepFromEngine(result);
+      } else {
+        setFeedback({
+          message: buildTapeResultWrongMessage(machine, fired, chosenCfg),
+          variant: 'error',
+          showExplanation: true,
+        });
+      }
+      return;
+    }
+
+    if (!transitionMcq) return;
     const chosen = idToAnswer.get(selectedId);
     if (!chosen) return;
 
     const { correct, expected } = gradeNextTransition(machine, config, chosen);
     if (correct) {
+      commitStepLockRef.current = true;
       const result = step(machine, config);
-      if (!result.fired) return;
+      if (!result.fired) {
+        commitStepLockRef.current = false;
+        return;
+      }
       if (!animateSteps) {
         applyStepResult(result.next, result.fired, result.status);
         return;
@@ -467,8 +655,11 @@ export function MvpPlayer({
   };
 
   const handleReset = () => {
+    commitStepLockRef.current = false;
     clearAnimTimers();
     clearPlayTimer();
+    clearPlaybackPreviewTimer();
+    setPreviewCorrectOptionId(null);
     setPlaying(false);
     setStepAnim(null);
     setConfig(
@@ -495,10 +686,13 @@ export function MvpPlayer({
   };
 
   const handleOracleStep = () => {
-    if (halted || isAnimating) return;
+    if (halted || isAnimating || commitStepLockRef.current) return;
     clearPlayTimer();
+    clearPlaybackPreviewTimer();
+    setPreviewCorrectOptionId(null);
     const r = step(machine, config);
     if (!r.fired) return;
+    commitStepLockRef.current = true;
     if (!animateSteps) {
       applyStepResult(r.next, r.fired, r.status, {
         variant: 'success',
@@ -515,25 +709,39 @@ export function MvpPlayer({
   };
 
   const handlePlay = () => {
-    if (halted || isAnimating) return;
+    if (halted || isAnimating || commitStepLockRef.current) return;
     setPlaying(true);
     const r = step(machine, config);
     if (!r.fired) {
       setPlaying(false);
       return;
     }
-    runStepFromEngineRef.current?.(r, { fromPlayback: true });
+    commitStepLockRef.current = true;
+    if (exercise.mode === 'tape_result') {
+      runTapeResultPlaybackStep(r);
+    } else {
+      runStepFromEngineRef.current?.(r, { fromPlayback: true });
+    }
   };
 
   const handlePause = () => {
     setPlaying(false);
     clearPlayTimer();
+    clearPlaybackPreviewTimer();
+    setPreviewCorrectOptionId(null);
+    if (stepAnim == null) {
+      commitStepLockRef.current = false;
+    }
   };
 
   const handleShowCorrectStep = () => {
     if (halted || isAnimating || playerMode !== 'study') return;
+    if (commitStepLockRef.current) return;
+    clearPlaybackPreviewTimer();
+    setPreviewCorrectOptionId(null);
     const r = step(machine, config);
     if (!r.fired) return;
+    commitStepLockRef.current = true;
     setFeedback({
       message: 'Showing the correct transition.',
       variant: 'neutral',
@@ -560,7 +768,8 @@ export function MvpPlayer({
     <div className="space-y-6">
       <p className="text-sm text-slate-500">
         {exercise.category.replace(/_/g, ' ')} · difficulty {exercise.difficulty}{' '}
-        · next-transition · steps: {stepCount}
+        · {isTapeResultMode ? 'tape-result' : 'next-transition'} · steps:{' '}
+        {stepCount}
         {halted ? ' · halted' : null}
         {isAnimating ? ' · animating' : null}
         {playing ? ' · playing' : null}
@@ -587,14 +796,19 @@ export function MvpPlayer({
             className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-xs text-slate-200"
             value={animSpeed}
             onChange={(e) =>
-              setAnimSpeed(e.target.value as 'slow' | 'normal' | 'fast')
+              setAnimSpeed(e.target.value as AnimationSpeed)
             }
             disabled={isAnimating}
             aria-label="Animation speed"
           >
-            <option value="slow">Slow</option>
-            <option value="normal">Normal</option>
-            <option value="fast">Fast</option>
+            {ANIMATION_SPEED_ORDER.map((s) => {
+              const t = ANIMATION_SPEED_TIMING[s];
+              return (
+                <option key={s} value={s}>
+                  {t.label} ({t.approxStepLabel})
+                </option>
+              );
+            })}
           </select>
         </label>
         {playerMode === 'study' ? (
@@ -698,17 +912,38 @@ export function MvpPlayer({
           />
         </div>
         <div className="flex-1 space-y-4">
-          <QuestionPanel
-            title={exercise.title}
-            description={exercise.description}
-            options={options}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            onSubmit={handleSubmit}
-            submitDisabled={halted}
-            halted={halted}
-            interactionLocked={isAnimating}
-          />
+          {isTapeResultMode ? (
+            <TapeResultQuestion
+              machine={machine}
+              title={exercise.title}
+              description={exercise.description}
+              options={tapeResultMcq?.options ?? []}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onSubmit={handleSubmit}
+              submitDisabled={
+                halted || !tapeResultMcq || playing || previewCorrectOptionId !== null
+              }
+              halted={halted}
+              interactionLocked={isAnimating}
+              previewCorrectOptionId={previewCorrectOptionId}
+              playbackPreviewActive={
+                playing && previewCorrectOptionId !== null && !isAnimating
+              }
+            />
+          ) : (
+            <QuestionPanel
+              title={exercise.title}
+              description={exercise.description}
+              options={transitionOptions}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onSubmit={handleSubmit}
+              submitDisabled={halted || !transitionMcq}
+              halted={halted}
+              interactionLocked={isAnimating}
+            />
+          )}
           <FeedbackPanel
             message={feedback.message}
             variant={feedback.variant}

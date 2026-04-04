@@ -74,12 +74,32 @@
   animation: tm-tape-head-pulse 1.1s ease-in-out infinite;
 }
 
+/** Tape-result playback: subtle glow pulse on the true one-step option before/during animation */
+@keyframes tape-result-preview-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 18px rgb(56 189 248 / 0.2),
+      0 0 0 1px rgb(56 189 248 / 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 28px rgb(56 189 248 / 0.32),
+      0 0 0 1px rgb(56 189 248 / 0.5);
+  }
+}
+
+.tape-result-preview-pulse {
+  animation: tape-result-preview-pulse 1.45s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tm-diagram-edge-pulse,
   .tm-node-destination-hint,
   .tm-node-state-entry,
   .tm-tape-write-pulse,
-  .tm-tape-head-move-pulse {
+  .tm-tape-head-move-pulse,
+  .tape-result-preview-pulse {
     animation: none;
   }
 }

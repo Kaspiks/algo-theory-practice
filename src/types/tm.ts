@@ -52,6 +52,69 @@ export interface TMConfiguration {
   tape: TapeModel;
 }
 
+/**
+ * Snapshot of a TM configuration for prompts, diagrams, and grading.
+ * Alias of {@link TMConfiguration}; use this name when emphasizing “current” or “result” views.
+ */
+export type TmConfigurationSnapshot = TMConfiguration;
+
+/**
+ * One authored multiple-choice option for tape-result mode (next state + tape + head).
+ * `tapeCells` is the full cell sequence; `headPosition` must index into `tapeCells`
+ * (engine-normalized tapes may extend with blanks — match `ensureHeadInBounds` when authoring).
+ */
+export interface TapeResultOption {
+  id: string;
+  nextState: StateId;
+  tapeCells: TapeSymbol[];
+  headPosition: number;
+  /** Short legend / screen-reader text. */
+  label?: string;
+  /** Optional author note (not shown as main feedback unless wired in UI). */
+  explanation?: string;
+}
+
+/** Runtime MCQ row for tape-result UI (projection of {@link TapeResultOption}). */
+export interface TapeResultMcqOption {
+  id: string;
+  label: string;
+  resultingConfig: TMConfiguration;
+}
+
+export function tapeResultOptionToConfiguration(
+  o: TapeResultOption
+): TMConfiguration {
+  return {
+    state: o.nextState,
+    tape: { cells: [...o.tapeCells], headIndex: o.headPosition },
+  };
+}
+
+export function configurationToTapeResultOption(
+  id: string,
+  c: TMConfiguration,
+  meta?: { label?: string; explanation?: string }
+): TapeResultOption {
+  return {
+    id,
+    nextState: c.state,
+    tapeCells: [...c.tape.cells],
+    headPosition: c.tape.headIndex,
+    label: meta?.label,
+    explanation: meta?.explanation,
+  };
+}
+
+export function projectTapeResultOptionsToMcq(
+  options: TapeResultOption[]
+): TapeResultMcqOption[] {
+  return options.map((o) => ({
+    id: o.id,
+    label: o.label ?? o.id,
+    resultingConfig: tapeResultOptionToConfiguration(o),
+  }));
+}
+
 export type HaltStatus = 'running' | 'accepted' | 'rejected' | 'max_steps_exceeded';
 
 export interface TransitionFired {

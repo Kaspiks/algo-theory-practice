@@ -124,16 +124,38 @@ export interface TransitionMcqOption {
   /** If omitted, derive label from answer in UI */
   answer: TransitionAnswer;
 }
+
+/**
+ * Author-facing option for tape-result MCQ (one step → full configuration).
+ * Projected to {@link TMConfiguration} for grading via tapeResultOptionToConfiguration.
+ */
+export interface TapeResultOption {
+  id: string;
+  nextState: StateId;
+  tapeCells: TapeSymbol[];
+  headPosition: number;
+  label?: string;
+  explanation?: string;
+}
+
+/** UI/runtime row after projection */
+export interface TapeResultMcqOption {
+  id: string;
+  label: string;
+  resultingConfig: TMConfiguration;
+}
 ```
 
 ---
 
-## 2. Exercise domain
+## 2. Exercise domain (MVP pack)
 
-### 2.1 Shared enumerations
+Implemented types live in **`src/types/mvp.ts`** (exercises) and **`src/types/tm.ts`** (machine + `TapeResultOption`). The **prompt configuration** before any step is always derived at runtime: `initialConfiguration(machine, setup.input, setup.headIndex ?? 0)` — it is a `TmConfigurationSnapshot` / `TMConfiguration`, not duplicated per exercise row.
+
+### 2.1 Shared fields and mode tag
 
 ```ts
-// src/types/exercise.ts
+// src/types/mvp.ts
 
 export type QuestionMode =
   | 'next_transition'
@@ -142,10 +164,18 @@ export type QuestionMode =
   | 'strategy'
   | 'tracing';
 
-export type Difficulty = 1 | 2 | 3 | 4;
+export type ExerciseCategory =
+  | 'tm_basics'
+  | 'tracing'
+  | 'scan_right'
+  | 'reject_bad_symbol'
+  | 'return_left'
+  | 'marking'
+  | 'homework_style';
 
-export interface HintRef {
-  /** e.g. NT.1, TR.1 — resolved via content/hints.ts */
+export type ExerciseDifficulty = 1 | 2 | 3 | 4;
+
+export interface ExerciseHintRef {
   hintId: string;
 }
 
@@ -153,126 +183,60 @@ export interface ExerciseBase {
   id: string;
   title: string;
   description?: string;
-  /** Pattern tags: P1, scan, … */
-  tags: string[];
-  /** Skill ids from curriculum: S2.1, etc. */
-  skills: string[];
-  difficulty: Difficulty;
-  /** Ordered weakest → strongest */
-  hints: HintRef[];
-  /** Shown after submit (per study/quiz rules) */
+  category: ExerciseCategory;
+  difficulty: ExerciseDifficulty;
+  machineId: string;
+  setup: ExerciseSetup;
+  hints: ExerciseHintRef[];
   explanation: string;
-  /** Optional: restrict which modes this item supports in a multi-mode pack */
-  modesEnabled?: QuestionMode[];
+  tags?: string[];
 }
-```
 
-### 2.2 Setup and machine reference
-
-```ts
 export interface ExerciseSetup {
-  /** Raw input string; UI/engine maps chars to TapeSymbol (UTF-16 code units or single-char symbols) */
   input: string;
   headIndex?: number;
-  /** Free text for author notes / student preamble */
-  tapeAlphabetNote?: string;
-}
-
-export interface MachineRef {
-  machineId: string;
 }
 ```
 
-### 2.3 Mode-specific exercise shapes
-
-Use a **discriminated union** on `mode` so switches stay exhaustive.
+### 2.2 Discriminated union (`MvpExercise`)
 
 ```ts
 export interface NextTransitionExercise extends ExerciseBase {
   mode: 'next_transition';
-  machine: MachineRef;
-  setup: ExerciseSetup;
-  /** The configuration *before* the student picks the next transition */
-  promptConfig: TMConfiguration;
-  options: TransitionMcqOption[];
-  correctOptionId: string;
+  options?: TransitionMcqOption[];
+  correctOptionId?: string;
+  canonicalFirstAnswer?: TransitionAnswer;
 }
 
-export type TapeResultRunSpec =
-  | { kind: 'steps'; steps: number }
-  | { kind: 'halt'; maxSteps: number }
-  | { kind: 'acceptance_only'; maxSteps: number };
-
-export interface TapeSegmentAnswer {
-  /** Inclusive window relative to tape indices after simulation */
-  fromIndex: number;
-  toIndex: number;
-  cells: TapeSymbol[];
-}
-
+/**
+ * One-step “what is the next full configuration?” MCQ.
+ * - Omit options / correctOptionId → player uses buildTapeResultMcq (engine-generated distractors).
+ * - Provide options + correctOptionId → player uses buildTapeResultMcqFromAuthor (order preserved; correct row must equal step()).
+ */
 export interface TapeResultExercise extends ExerciseBase {
   mode: 'tape_result';
-  machine: MachineRef;
-  setup: ExerciseSetup;
-  run: TapeResultRunSpec;
-  /** What the student must supply */
-  asks: Array<'halt_status' | 'tape_segment' | 'head_index'>;
-  correct: {
-    haltStatus?: Exclude<HaltStatus, 'running'> | 'accepted' | 'rejected';
-    tapeSegment?: TapeSegmentAnswer;
-    headIndex?: number;
-  };
-  grading?: {
-    trimBlanks?: boolean;
-    /** Treat these as equal to machine.blank when comparing */
-    blankAliases?: TapeSymbol[];
-  };
+  options?: TapeResultOption[];
+  correctOptionId?: string;
+  walkthrough?: { stepHintIds?: Record<number, string> };
 }
 
-/** Missing cell in δ */
-export interface MissingTransitionSlot {
-  state: StateId;
-  read: TapeSymbol;
-}
-
+/** Placeholders for future drills; unused in current pack. */
 export interface MissingTransitionExercise extends ExerciseBase {
   mode: 'missing_transition';
-  /** Base machine possibly incomplete: transitions[slot] undefined */
-  machinePartial: TuringMachineDefinition;
-  slot: MissingTransitionSlot;
-  options: TransitionMcqOption[];
-  correctOptionId: string;
 }
-
 export interface StrategyExercise extends ExerciseBase {
   mode: 'strategy';
-  /** Language / scenario text */
-  scenario: string;
-  /** Optional partial machine for context */
-  machine?: MachineRef;
-  options: Array<{ id: string; label: string }>;
-  correctOptionId: string;
 }
 
-export type TracingVariant =
-  | { kind: 'pick_next'; maxSteps: number }
-  | { kind: 'fill_row'; rowIndex: number }
-  | { kind: 'find_first_error' };
-
-export interface TraceRow {
-  config: TMConfiguration;
-}
-
+/** Same optional MCQ as next-transition when tracing is framed as δ-choice. */
 export interface TracingExercise extends ExerciseBase {
   mode: 'tracing';
-  machine: MachineRef;
-  setup: ExerciseSetup;
-  variant: TracingVariant;
-  /** Authoritative trace for grading (engine-generated offline or hand-checked) */
-  solutionTrace: TraceRow[];
+  options?: TransitionMcqOption[];
+  correctOptionId?: string;
+  canonicalFirstAnswer?: TransitionAnswer;
 }
 
-export type Exercise =
+export type MvpExercise =
   | NextTransitionExercise
   | TapeResultExercise
   | MissingTransitionExercise
@@ -280,7 +244,24 @@ export type Exercise =
   | TracingExercise;
 ```
 
-**Content note:** For `missing_transition`, authors may duplicate the full machine with one hole instead of a special file format; `machinePartial` must still parse as `TuringMachineDefinition` with `transitions[state][read]` absent.
+### 2.3 Tape-result grading helpers
+
+```ts
+// src/lib/grading/tapeResult.ts — summaries
+
+buildTapeResultMcq(machine, config)           // dynamic MCQ + internal correct id `tr-correct`
+buildTapeResultMcqFromAuthor(machine, config, { options, correctOptionId }) // static pack rows; null if authoring wrong
+gradeTapeResult(machine, config, chosenConfig)
+
+// src/types/mvp.ts
+export interface TapeResultGradingPayload {
+  correct: boolean;
+  chosenOptionId?: string;
+  fired?: TransitionFired;
+}
+```
+
+**Pack validation:** `tests/content/pack.test.ts` requires every `tape_result` item to yield a non-null MCQ (authored path preferred when `options` + `correctOptionId` are set) and the marked option’s `resultingConfig` must equal `step(machine, c0).next` under `configurationsEqual`.
 
 ### 2.4 Content registry
 
@@ -290,9 +271,9 @@ export interface MachineRegistry {
 }
 
 export interface ExerciseRegistry {
-  list(): Exercise[];
-  get(id: string): Exercise | undefined;
-  byTag?(tag: string): Exercise[];
+  list(): MvpExercise[];
+  get(id: string): MvpExercise | undefined;
+  byTag?(tag: string): MvpExercise[];
 }
 ```
 

@@ -70,7 +70,7 @@ export function App() {
           Turing Machine practice
         </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Next-transition mode · exercise pack (difficulty 1 → 3)
+          Next-transition & tape-result exercises · pack sorted by difficulty
         </p>
         <fieldset className="mt-3 flex flex-wrap gap-4 text-sm text-slate-300">
           <legend className="sr-only">Player mode</legend>

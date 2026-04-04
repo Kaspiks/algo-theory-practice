@@ -390,6 +390,97 @@ const exercisesUnsorted: MvpExercise[] = [
     ),
     correctOptionId: 'opt-correct',
   },
+  {
+    id: 'tape-result-authored-schema-demo',
+    title: 'Tape result (authored options, schema demo)',
+    description:
+      'Same setup as “scan right” but each choice is a typed **`TapeResultOption`** in the pack; `correctOptionId` must match `step()`.',
+    category: 'scan_right',
+    difficulty: 1,
+    mode: 'tape_result',
+    machineId: 'mvp_scan_binary',
+    setup: { input: '010', headIndex: 0 },
+    correctOptionId: 'schema-correct',
+    options: [
+      {
+        id: 'schema-correct',
+        nextState: 'q0',
+        tapeCells: ['0', '1', '0'],
+        headPosition: 1,
+        label: 'q0; head at index 1; tape 010',
+      },
+      {
+        id: 'schema-stay-head',
+        nextState: 'q0',
+        tapeCells: ['0', '1', '0'],
+        headPosition: 0,
+        label: 'Head did not move right',
+      },
+      {
+        id: 'schema-wrong-state',
+        nextState: 'q_accept',
+        tapeCells: ['0', '1', '0'],
+        headPosition: 1,
+        label: 'Jumped to accept too early',
+      },
+      {
+        id: 'schema-wrong-cell',
+        nextState: 'q0',
+        tapeCells: ['1', '1', '0'],
+        headPosition: 1,
+        label: 'Wrong symbol written at head',
+      },
+    ],
+    tags: ['tape-result', 'schema'],
+    hints: [{ hintId: 'NT.1' }],
+    explanation:
+      'Demonstrates the discriminated `TapeResultExercise` shape: `options` + `correctOptionId`. The content test checks that the marked option equals `step()` from the initial configuration.',
+  },
+  {
+    id: 'tape-result-scan-right',
+    title: 'Tape result: scan right (one step)',
+    description:
+      'Input **010**, head on the first cell. After **one** step, which configuration matches the scan-to-blank machine?',
+    category: 'scan_right',
+    difficulty: 1,
+    mode: 'tape_result',
+    machineId: 'mvp_scan_binary',
+    setup: { input: '010', headIndex: 0 },
+    tags: ['tape-result', 'P1'],
+    hints: [{ hintId: 'NT.1' }, { hintId: 'SCAN.1' }],
+    explanation:
+      'In q0 on symbol 0, the machine writes 0, moves right, and stays in q0. The tape is unchanged except at the head cell (still 0).',
+  },
+  {
+    id: 'tape-result-mark-zero',
+    title: 'Tape result: mark 0 as X',
+    description:
+      'Input **01**, head on the first cell. One step on the “mark 0 as X” machine.',
+    category: 'marking',
+    difficulty: 2,
+    mode: 'tape_result',
+    machineId: 'mark_zeros_x_tm',
+    setup: { input: '01', headIndex: 0 },
+    tags: ['tape-result', 'marking'],
+    hints: [{ hintId: 'NT.1' }],
+    explanation:
+      'Reading 0 in q0, the machine writes X at the current cell, moves right, and stays in q0.',
+  },
+  {
+    id: 'tape-result-contains-after-first-zero',
+    title: 'Tape result: hunting 001 (after first 0)',
+    description:
+      'Input **001**, head on index **1** (second symbol). You are still in q0; pick the true configuration after one step.',
+    category: 'homework_style',
+    difficulty: 3,
+    mode: 'tape_result',
+    machineId: 'contains_001_tm',
+    setup: { input: '001', headIndex: 1 },
+    tags: ['tape-result', 'contains'],
+    hints: [{ hintId: 'NT.1' }],
+    explanation:
+      'In q0 on 0, the machine enters q_saw0, writes 0, and moves right—first step toward recognizing substring 001.',
+  },
 ];
 
 function byDifficultyThenId(a: MvpExercise, b: MvpExercise): number {

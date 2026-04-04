@@ -61,6 +61,63 @@ describe('TM engine — scan binary machine', () => {
     expect(r.status).toBe('accepted');
   });
 
+  it('extends tape with blank on move right past end', () => {
+    const BLANK = '⊔';
+    const machine: TuringMachineDefinition = {
+      id: 'extend_r',
+      states: ['q0', 'q_accept', 'q_reject'],
+      inputAlphabet: ['0'],
+      tapeAlphabet: ['0', BLANK],
+      start: 'q0',
+      accept: 'q_accept',
+      reject: 'q_reject',
+      blank: BLANK,
+      policies: { leftEnd: 'reject', undefinedTransition: 'reject' },
+      transitions: {
+        q0: {
+          '0': { next: 'q0', write: '0', move: 'R' },
+          [BLANK]: { next: 'q_accept', write: BLANK, move: 'S' },
+        },
+        q_accept: {},
+        q_reject: {},
+      },
+    };
+    let c = initialConfiguration(machine, '0', 0);
+    c = step(machine, c).next;
+    expect(c.tape.cells).toEqual(['0', BLANK]);
+    expect(c.tape.headIndex).toBe(1);
+    expect(c.state).toBe('q0');
+    const r2 = step(machine, c);
+    expect(r2.status).toBe('accepted');
+  });
+
+  it('rejects when moving left from leftmost cell (policy reject)', () => {
+    const BLANK = '⊔';
+    const machine: TuringMachineDefinition = {
+      id: 'left_reject',
+      states: ['q0', 'q_accept', 'q_reject'],
+      inputAlphabet: ['0'],
+      tapeAlphabet: ['0', BLANK],
+      start: 'q0',
+      accept: 'q_accept',
+      reject: 'q_reject',
+      blank: BLANK,
+      policies: { leftEnd: 'reject', undefinedTransition: 'reject' },
+      transitions: {
+        q0: {
+          '0': { next: 'q0', write: '0', move: 'L' },
+        },
+        q_accept: {},
+        q_reject: {},
+      },
+    };
+    const c = initialConfiguration(machine, '0', 0);
+    const r = step(machine, c);
+    expect(r.status).toBe('rejected');
+    expect(r.next.state).toBe('q_reject');
+    expect(r.fired?.move).toBe('L');
+  });
+
   it('rejects on undefined transition; peek gives synthetic reject triple', () => {
     const BLANK = '⊔';
     const machine: TuringMachineDefinition = {

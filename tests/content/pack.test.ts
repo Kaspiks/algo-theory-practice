@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { exercisePack } from '@/content/exercises/pack';
 import { getMachineById } from '@/content/machines/index';
-import { answersEqual, initialConfiguration, peekNextAnswer } from '@/lib/tm/engine';
+import {
+  buildTapeResultMcq,
+  buildTapeResultMcqFromAuthor,
+  configurationsEqual,
+} from '@/lib/grading/tapeResult';
+import {
+  answersEqual,
+  initialConfiguration,
+  peekNextAnswer,
+  step,
+} from '@/lib/tm/engine';
 
 describe('exercise pack authoring', () => {
   it('is sorted by difficulty then id', () => {
@@ -27,16 +37,44 @@ describe('exercise pack authoring', () => {
       const expected = peekNextAnswer(machine!, c0);
       expect(expected).not.toBeNull();
 
-      if (ex.options?.length && ex.correctOptionId) {
-        const opt = ex.options.find((o) => o.id === ex.correctOptionId);
-        expect(opt, `correctOptionId ${ex.correctOptionId}`).toBeDefined();
-        expect(answersEqual(opt!.answer, expected!)).toBe(true);
+      if (ex.mode === 'tape_result') {
+        const authoredMcq =
+          ex.options?.length && ex.correctOptionId
+            ? buildTapeResultMcqFromAuthor(machine!, c0, {
+                options: ex.options,
+                correctOptionId: ex.correctOptionId,
+              })
+            : null;
+        const built =
+          authoredMcq ?? buildTapeResultMcq(machine!, c0);
+        expect(built, `tape-result MCQ for ${ex.id}`).not.toBeNull();
+        const correctOpt = built!.options.find(
+          (o) => o.id === built!.correctOptionId
+        );
+        expect(correctOpt).toBeDefined();
+        const { next } = step(machine!, c0);
+        expect(
+          configurationsEqual(
+            machine!,
+            correctOpt!.resultingConfig,
+            next
+          )
+        ).toBe(true);
+        return;
       }
 
-      if (ex.canonicalFirstAnswer) {
-        expect(
-          answersEqual(ex.canonicalFirstAnswer, expected!)
-        ).toBe(true);
+      if (ex.mode === 'next_transition' || ex.mode === 'tracing') {
+        if (ex.options?.length && ex.correctOptionId) {
+          const opt = ex.options.find((o) => o.id === ex.correctOptionId);
+          expect(opt, `correctOptionId ${ex.correctOptionId}`).toBeDefined();
+          expect(answersEqual(opt!.answer, expected!)).toBe(true);
+        }
+
+        if (ex.canonicalFirstAnswer) {
+          expect(
+            answersEqual(ex.canonicalFirstAnswer, expected!)
+          ).toBe(true);
+        }
       }
     });
   }

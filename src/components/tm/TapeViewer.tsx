@@ -21,6 +21,8 @@ export type TapeCellEmphasis = 'none' | 'write' | 'head_move';
 export interface TapeViewerProps {
   machine: TuringMachineDefinition;
   tape: TapeModel;
+  /** `compact` = smaller cells for option cards. */
+  variant?: 'default' | 'compact';
   /** Head highlight index (defaults to tape.headIndex). */
   visualHeadIndex?: number;
   /** Softer ring on previous head cell during head-move animation. */
@@ -32,15 +34,19 @@ export interface TapeViewerProps {
 export function TapeViewer({
   machine,
   tape,
+  variant = 'default',
   visualHeadIndex: visualHeadProp,
   ghostHeadIndex = null,
   cellEmphasis = 'none',
 }: TapeViewerProps) {
   const visualHead = visualHeadProp ?? tape.headIndex;
+  const compact = variant === 'compact';
 
   return (
     <div
-      className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-700 bg-slate-900/80 p-4"
+      className={`flex flex-wrap items-center gap-1 rounded-lg border border-slate-700 bg-slate-900/80 ${
+        compact ? 'p-2' : 'p-4'
+      }`}
       role="group"
       aria-label="Tape"
     >
@@ -63,7 +69,11 @@ export function TapeViewer({
         return (
           <div
             key={`cell-${i}`}
-            className={`flex min-w-[2.5rem] flex-col items-center rounded border px-2 py-1 font-mono text-lg transition-[transform,box-shadow,background-color,border-color] duration-300 ease-out ${
+            className={`flex flex-col items-center rounded border font-mono transition-[transform,box-shadow,background-color,border-color] duration-300 ease-out ${
+              compact
+                ? 'min-w-[1.85rem] px-1 py-0.5 text-sm'
+                : 'min-w-[2.5rem] px-2 py-1 text-lg'
+            } ${
               isHead
                 ? `border-amber-400 bg-amber-500/25 text-amber-50 ${emphasis} ${writePulse} ${headMovePulse}`
                 : isGhost

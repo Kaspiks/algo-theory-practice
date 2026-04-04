@@ -6,7 +6,8 @@ import type {
 } from '@/types/tm';
 import { ensureHeadInBounds } from '@/lib/tm/tape';
 
-export type AnimationSpeed = 'slow' | 'normal' | 'fast';
+/** UI / tuning: ordered slow → fast for study playback. */
+export type AnimationSpeed = 'verySlow' | 'slow' | 'normal' | 'fast';
 
 /** Ordered phases for one TM step (UI layer only). */
 export type StepAnimPhase =
@@ -16,38 +17,122 @@ export type StepAnimPhase =
   | 'head_to'
   | 'state';
 
+export interface SpeedTimingConfig {
+  /** Speed selector label */
+  label: string;
+  /** Short hint shown in UI (approximate wall-clock per step, L/R move) */
+  approxStepLabel: string;
+  stepPhaseDurations: Record<StepAnimPhase, number>;
+  phaseGapMs: number;
+  /** Tape-result Play: hold on correct option before engine animation (ms) */
+  playbackPreviewMs: number;
+  /** Delay after a step completes before autoplay starts the next (ms) */
+  autoplayBetweenStepsMs: number;
+}
+
+/**
+ * Central timing table — tune study pacing here only.
+ * Phase gaps are applied between successive phases (see `computePhaseSchedule`).
+ */
+export const ANIMATION_SPEED_TIMING: Record<
+  AnimationSpeed,
+  SpeedTimingConfig
+> = {
+  verySlow: {
+    label: 'Very slow',
+    approxStepLabel: '~8–9s / step',
+    stepPhaseDurations: {
+      edge: 1800,
+      write: 1900,
+      head_from: 900,
+      head_to: 1000,
+      state: 1400,
+    },
+    phaseGapMs: 320,
+    playbackPreviewMs: 2400,
+    autoplayBetweenStepsMs: 750,
+  },
+  slow: {
+    label: 'Slow',
+    approxStepLabel: '~3.5s / step',
+    stepPhaseDurations: {
+      edge: 720,
+      write: 760,
+      head_from: 320,
+      head_to: 360,
+      state: 520,
+    },
+    phaseGapMs: 160,
+    playbackPreviewMs: 700,
+    autoplayBetweenStepsMs: 200,
+  },
+  normal: {
+    label: 'Normal',
+    approxStepLabel: '~2.5s / step',
+    stepPhaseDurations: {
+      edge: 480,
+      write: 500,
+      head_from: 220,
+      head_to: 260,
+      state: 360,
+    },
+    phaseGapMs: 120,
+    playbackPreviewMs: 700,
+    autoplayBetweenStepsMs: 200,
+  },
+  fast: {
+    label: 'Fast',
+    approxStepLabel: '~1.5s / step',
+    stepPhaseDurations: {
+      edge: 280,
+      write: 300,
+      head_from: 140,
+      head_to: 160,
+      state: 220,
+    },
+    phaseGapMs: 70,
+    playbackPreviewMs: 700,
+    autoplayBetweenStepsMs: 200,
+  },
+};
+
+/** Select option order (slowest first). */
+export const ANIMATION_SPEED_ORDER: AnimationSpeed[] = [
+  'verySlow',
+  'slow',
+  'normal',
+  'fast',
+];
+
+export function getPhaseGapMs(speed: AnimationSpeed): number {
+  return ANIMATION_SPEED_TIMING[speed].phaseGapMs;
+}
+
+export function getPlaybackPreviewMs(speed: AnimationSpeed): number {
+  return ANIMATION_SPEED_TIMING[speed].playbackPreviewMs;
+}
+
+export function getAutoplayBetweenStepsMs(speed: AnimationSpeed): number {
+  return ANIMATION_SPEED_TIMING[speed].autoplayBetweenStepsMs;
+}
+
+/** @deprecated Use `ANIMATION_SPEED_TIMING[s].stepPhaseDurations` */
 export const STEP_ANIMATION_DURATIONS_MS: Record<
   AnimationSpeed,
   Record<StepAnimPhase, number>
 > = {
-  slow: {
-    edge: 720,
-    write: 760,
-    head_from: 320,
-    head_to: 360,
-    state: 520,
-  },
-  normal: {
-    edge: 480,
-    write: 500,
-    head_from: 220,
-    head_to: 260,
-    state: 360,
-  },
-  fast: {
-    edge: 280,
-    write: 300,
-    head_from: 140,
-    head_to: 160,
-    state: 220,
-  },
+  verySlow: ANIMATION_SPEED_TIMING.verySlow.stepPhaseDurations,
+  slow: ANIMATION_SPEED_TIMING.slow.stepPhaseDurations,
+  normal: ANIMATION_SPEED_TIMING.normal.stepPhaseDurations,
+  fast: ANIMATION_SPEED_TIMING.fast.stepPhaseDurations,
 };
 
-/** Pause between phases so each stage reads clearly (ms). */
+/** @deprecated Use `getPhaseGapMs` */
 export const PHASE_GAP_MS: Record<AnimationSpeed, number> = {
-  slow: 160,
-  normal: 120,
-  fast: 70,
+  verySlow: ANIMATION_SPEED_TIMING.verySlow.phaseGapMs,
+  slow: ANIMATION_SPEED_TIMING.slow.phaseGapMs,
+  normal: ANIMATION_SPEED_TIMING.normal.phaseGapMs,
+  fast: ANIMATION_SPEED_TIMING.fast.phaseGapMs,
 };
 
 const PHASE_ORDER: StepAnimPhase[] = [
@@ -97,7 +182,7 @@ export function phaseDurationsForMove(
   speed: AnimationSpeed,
   move: TransitionFired['move']
 ): Record<StepAnimPhase, number> {
-  const d = STEP_ANIMATION_DURATIONS_MS[speed];
+  const d = ANIMATION_SPEED_TIMING[speed].stepPhaseDurations;
   if (move === 'S') {
     return {
       ...d,

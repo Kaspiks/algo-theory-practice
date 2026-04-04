@@ -4,7 +4,8 @@ Interactive practice for theory-of-computation courses.
 
 ## MVP (current)
 
-- **Next-transition** mode only: pick the correct δ each step; tape and diagram update after each correct answer.
+- **Next-transition** mode: pick the correct δ each step; tape and diagram update after each correct answer.
+- **Tape-result** mode: pick the full configuration (state + tape + head) after **one** step; options are built from the engine with plausible distractors (`src/lib/grading/tapeResult.ts`).
 - **Exercise pack** in `src/content/exercises/pack.ts` (sorted by difficulty). Use the header **Exercise** dropdown to switch problems.
 - Machines live in `src/content/machines/`; hints in `src/content/hints.ts`.
 

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ANIMATION_SPEED_TIMING,
   computePhaseSchedule,
   edgeGraphicMatchesFired,
   edgeLabelMatchesFired,
+  getPhaseGapMs,
+  phaseDurationsForMove,
   stepPhaseUiLabel,
 } from '@/lib/tm/stepAnimation';
 import type { TransitionFired } from '@/types/tm';
@@ -27,6 +30,25 @@ describe('edgeLabelMatchesFired', () => {
 
   it('does not match a different read symbol', () => {
     expect(edgeLabelMatchesFired('1→0,L', fired)).toBe(false);
+  });
+});
+
+describe('animation speed pacing', () => {
+  it('verySlow step takes longer wall-clock than slow (L move)', () => {
+    const dV = phaseDurationsForMove('verySlow', 'R');
+    const dS = phaseDurationsForMove('slow', 'R');
+    const tV = computePhaseSchedule(dV, getPhaseGapMs('verySlow')).totalMs;
+    const tS = computePhaseSchedule(dS, getPhaseGapMs('slow')).totalMs;
+    expect(tV).toBeGreaterThan(tS * 1.8);
+  });
+
+  it('exposes longer preview and autoplay gaps for verySlow', () => {
+    expect(ANIMATION_SPEED_TIMING.verySlow.playbackPreviewMs).toBeGreaterThan(
+      ANIMATION_SPEED_TIMING.slow.playbackPreviewMs
+    );
+    expect(
+      ANIMATION_SPEED_TIMING.verySlow.autoplayBetweenStepsMs
+    ).toBeGreaterThan(ANIMATION_SPEED_TIMING.slow.autoplayBetweenStepsMs);
   });
 });
 
