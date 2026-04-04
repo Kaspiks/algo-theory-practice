@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   ANIMATION_SPEED_TIMING,
+  computeDiagramEdgeHighlight,
   computePhaseSchedule,
   edgeGraphicMatchesFired,
   edgeLabelMatchesFired,
   getPhaseGapMs,
+  isTransitionFocusDimmingActive,
   phaseDurationsForMove,
   stepPhaseUiLabel,
 } from '@/lib/tm/stepAnimation';
@@ -30,6 +32,64 @@ describe('edgeLabelMatchesFired', () => {
 
   it('does not match a different read symbol', () => {
     expect(edgeLabelMatchesFired('1→0,L', fired)).toBe(false);
+  });
+});
+
+describe('isTransitionFocusDimmingActive', () => {
+  it('is true only when an in-flight transition highlight is present', () => {
+    expect(isTransitionFocusDimmingActive(undefined)).toBe(false);
+    expect(isTransitionFocusDimmingActive(fired)).toBe(true);
+  });
+});
+
+describe('computeDiagramEdgeHighlight', () => {
+  const eg = {
+    from: 'q0',
+    to: 'q1',
+    fullLabel: '0→1,R | 1→0,L',
+  };
+
+  it('marks active when edgeHighlightSource matches fullLabel', () => {
+    const h = computeDiagramEdgeHighlight(eg, {
+      edgeHighlightSource: fired,
+      transitionHighlight: undefined,
+      pulseActiveTransitionEdge: false,
+    });
+    expect(h.isActive).toBe(true);
+    expect(h.isAnimPulse).toBe(false);
+  });
+
+  it('marks anim pulse only when pulse flag and transitionHighlight both match', () => {
+    const h = computeDiagramEdgeHighlight(eg, {
+      edgeHighlightSource: fired,
+      transitionHighlight: fired,
+      pulseActiveTransitionEdge: true,
+    });
+    expect(h.isActive).toBe(true);
+    expect(h.isAnimPulse).toBe(true);
+  });
+
+  it('does not pulse when pulse flag is off', () => {
+    const h = computeDiagramEdgeHighlight(eg, {
+      edgeHighlightSource: fired,
+      transitionHighlight: fired,
+      pulseActiveTransitionEdge: false,
+    });
+    expect(h.isAnimPulse).toBe(false);
+  });
+
+  it('edge and label inputs share the same graphic match (fullLabel)', () => {
+    const args = {
+      edgeHighlightSource: fired,
+      transitionHighlight: fired,
+      pulseActiveTransitionEdge: true,
+    };
+    const a = computeDiagramEdgeHighlight(eg, args);
+    const b = computeDiagramEdgeHighlight(
+      { from: eg.from, to: eg.to, fullLabel: eg.fullLabel },
+      args
+    );
+    expect(a).toEqual(b);
   });
 });
 

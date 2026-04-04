@@ -7,90 +7,21 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { resolveDiagramNodes } from '@/lib/tm/diagramLayout';
 import {
-  computeDiagramViewBox,
-  resolveDiagramNodes,
-  type DiagramNodeBox,
-} from '@/lib/tm/diagramLayout';
-import { edgeGraphicMatchesFired } from '@/lib/tm/stepAnimation';
+  computeStateDiagramScene,
+  type DiagramScenePreset,
+} from '@/lib/tm/stateDiagramScene';
+import {
+  computeDiagramEdgeHighlight,
+  isTransitionFocusDimmingActive,
+  type DiagramEdgeHighlightState,
+} from '@/lib/tm/stepAnimation';
 import type { StateId, TransitionFired, TuringMachineDefinition } from '@/types/tm';
 
 /** Optional manual positions (centers); auto layout is used when omitted. */
 export interface DiagramLayout {
   positions: Record<StateId, { x: number; y: number }>;
-}
-
-function edgeLabels(machine: TuringMachineDefinition): {
-  from: StateId;
-  to: StateId;
-  label: string;
-}[] {
-  const edges: { from: StateId; to: StateId; parts: string[] }[] = [];
-  const map = new Map<string, { from: StateId; to: StateId; parts: string[] }>();
-
-  for (const [from, row] of Object.entries(machine.transitions)) {
-    if (!row) continue;
-    for (const [read, rule] of Object.entries(row)) {
-      if (!rule) continue;
-      const key = `${from}->${rule.next}`;
-      const label = `${read}→${rule.write},${rule.move}`;
-      let e = map.get(key);
-      if (!e) {
-        e = { from, to: rule.next, parts: [] };
-        map.set(key, e);
-        edges.push(e);
-      }
-      e.parts.push(label);
-    }
-  }
-
-  return edges.map((e) => ({
-    from: e.from,
-    to: e.to,
-    label: e.parts.join(' | '),
-  }));
-}
-
-function anchorsForward(
-  a: DiagramNodeBox,
-  b: DiagramNodeBox
-): { ex: number; ey: number; ix: number; iy: number } {
-  const forward = b.cx >= a.cx;
-  if (forward) {
-    return {
-      ex: a.cx + a.w / 2,
-      ey: a.cy,
-      ix: b.cx - b.w / 2,
-      iy: b.cy,
-    };
-  }
-  return {
-    ex: a.cx - a.w / 2,
-    ey: a.cy,
-    ix: b.cx + b.w / 2,
-    iy: b.cy,
-  };
-}
-
-function cubicEdgePath(
-  ex: number,
-  ey: number,
-  ix: number,
-  iy: number,
-  ySkew: number
-): string {
-  const span = Math.abs(ix - ex);
-  const t = Math.min(140, Math.max(56, span * 0.42));
-  const sign = ix >= ex ? 1 : -1;
-  return `M ${ex} ${ey} C ${ex + sign * t} ${ey + ySkew} ${ix - sign * t} ${iy + ySkew} ${ix} ${iy}`;
-}
-
-function selfLoopPath(n: DiagramNodeBox): { d: string; lx: number; ly: number } {
-  const { cx, cy, w, h } = n;
-  const outX = cx + w / 2 + 4;
-  const lift = Math.max(52, h * 0.85);
-  const d = `M ${outX} ${cy} C ${outX + 52} ${cy - lift} ${outX + 52} ${cy + lift} ${outX} ${cy}`;
-  return { d, lx: outX + 36, ly: cy - lift * 0.45 };
 }
 
 export type DiagramSize = 'embedded' | 'expanded';
@@ -109,7 +40,6 @@ const SIZE_PRESETS: Record<
     edgeCharWidth: number;
     rectRx: number;
     outerRing: number;
-    labelYOffset: number;
   }
 > = {
   embedded: {
@@ -121,10 +51,9 @@ const SIZE_PRESETS: Record<
     edgeLabelMaxChars: 48,
     stateTextClass: 'text-[14px] font-semibold tracking-tight',
     edgeTextClass: 'text-[12px] font-medium',
-    edgeCharWidth: 6.4,
+    edgeCharWidth: 6.35,
     rectRx: 10,
     outerRing: 5,
-    labelYOffset: 20,
   },
   expanded: {
     padding: 104,
@@ -134,13 +63,23 @@ const SIZE_PRESETS: Record<
     markerH: 14,
     edgeLabelMaxChars: 64,
     stateTextClass: 'text-lg font-semibold tracking-tight',
-    edgeTextClass: 'text-[15px] font-medium',
-    edgeCharWidth: 8,
+    edgeTextClass: 'text-[16px] font-medium',
+    edgeCharWidth: 8.35,
     rectRx: 12,
     outerRing: 7,
-    labelYOffset: 26,
   },
 };
+
+/** Layout preset slice for `computeStateDiagramScene` (keeps Fit zoom in sync with the SVG). */
+export function diagramScenePreset(size: DiagramSize): DiagramScenePreset {
+  const p = SIZE_PRESETS[size];
+  return {
+    padding: p.padding,
+    outerRing: p.outerRing,
+    edgeLabelMaxChars: p.edgeLabelMaxChars,
+    edgeCharWidth: p.edgeCharWidth,
+  };
+}
 
 export interface StateDiagramViewerProps {
   machine: TuringMachineDefinition;
@@ -188,15 +127,47 @@ export function StateDiagramViewer({
     [machine, size, layoutProp]
   );
 
-  const edges = useMemo(() => edgeLabels(machine), [machine]);
   const preset = SIZE_PRESETS[size];
   const stateForNodes = displayState ?? currentState;
   const edgeHighlightSource = transitionHighlight ?? lastTransition;
+  /** True only while a step animation is highlighting a concrete transition (not static `lastTransition`). */
+  const animTransitionFocus = isTransitionFocusDimmingActive(transitionHighlight);
 
-  const { x: vx, y: vy, w: vw, h: vh } = useMemo(
-    () => computeDiagramViewBox(nodes, machine, preset.padding),
-    [nodes, machine, preset.padding]
+  const hitStrokeW = size === 'expanded' ? 22 : 18;
+  /** Inactive edges during transition-focus: clearly secondary vs active. */
+  const dimEdgePathOp = 0.28;
+  /** Inactive labels during transition-focus: ~40% group opacity + muted chip/text. */
+  const dimLabelGroupOp = 0.4;
+
+  const { vx, vy, vw, vh, edgeLayouts } = useMemo(
+    () =>
+      computeStateDiagramScene(machine, nodes, size, diagramScenePreset(size)),
+    [machine, nodes, size]
   );
+
+  /** One highlight decision per edge key — edge paths and label chips must stay identical. */
+  const edgeHighlightByKey = useMemo(() => {
+    const m = new Map<string, DiagramEdgeHighlightState>();
+    for (const eg of edgeLayouts) {
+      m.set(
+        eg.key,
+        computeDiagramEdgeHighlight(
+          { from: eg.from, to: eg.to, fullLabel: eg.fullLabel },
+          {
+            edgeHighlightSource,
+            transitionHighlight,
+            pulseActiveTransitionEdge,
+          }
+        )
+      );
+    }
+    return m;
+  }, [
+    edgeLayouts,
+    edgeHighlightSource,
+    transitionHighlight,
+    pulseActiveTransitionEdge,
+  ]);
 
   const svgInner = (
     <svg
@@ -207,6 +178,7 @@ export function StateDiagramViewer({
       preserveAspectRatio="xMidYMid meet"
       role="img"
       aria-label="Turing machine state diagram"
+      data-tm-transition-focus={animTransitionFocus ? 'true' : undefined}
     >
       <defs>
         <marker
@@ -224,170 +196,115 @@ export function StateDiagramViewer({
           />
         </marker>
       </defs>
-      {edges.map((e, i) => {
-          const a = nodes[e.from];
-          const b = nodes[e.to];
-          if (!a || !b) return null;
-          const key = `${e.from}|${e.to}|${e.label}`;
-          const highlighted =
-            edgeHighlightSource &&
-            edgeGraphicMatchesFired(
-              { from: e.from, to: e.to, label: e.label },
-              edgeHighlightSource
-            );
-          const pulseEdge = Boolean(
-            transitionHighlight &&
-              edgeGraphicMatchesFired(
-                { from: e.from, to: e.to, label: e.label },
-                transitionHighlight
-              )
-          );
-          const edgeAnimPulse = pulseEdge && pulseActiveTransitionEdge;
-          const hovered = hoverEdge === key;
-          const ySkew = ((i % 9) - 4) * 7;
-          const strokeColor = highlighted
-            ? pulseEdge
-              ? '#fde047'
-              : '#fbbf24'
-            : hovered
-              ? '#94a3b8'
+      <rect
+        className="tm-diagram-spotlight-underlay"
+        x={vx}
+        y={vy}
+        width={vw}
+        height={vh}
+        fill="#020617"
+        fillOpacity={0.2}
+        pointerEvents="none"
+        aria-hidden
+        style={{ opacity: animTransitionFocus ? 1 : 0 }}
+      />
+      {edgeLayouts.map((eg) => {
+        const { isActive, isAnimPulse } = edgeHighlightByKey.get(eg.key)!;
+        const hovered = hoverEdge === eg.key;
+        const strokeColor = isActive
+          ? isAnimPulse
+            ? '#fde047'
+            : '#fbbf24'
+          : hovered
+            ? '#94a3b8'
+            : animTransitionFocus
+              ? '#4b5563'
               : '#5b6a7f';
-          const strokeW = highlighted
-            ? pulseEdge
-              ? preset.edgeStrokeHi + 1.1
-              : preset.edgeStrokeHi
-            : hovered
-              ? preset.edgeStrokeNormal + 0.6
-              : preset.edgeStrokeNormal;
-          const label =
-            e.label.length > preset.edgeLabelMaxChars
-              ? `${e.label.slice(0, preset.edgeLabelMaxChars - 1)}…`
-              : e.label;
-          const lw = Math.min(
-            vw * 0.42,
-            label.length * preset.edgeCharWidth + 14
-          );
-          const lh = size === 'expanded' ? 22 : 18;
+        const strokeW = isActive
+          ? isAnimPulse
+            ? preset.edgeStrokeHi + 1.1
+            : preset.edgeStrokeHi
+          : hovered
+            ? preset.edgeStrokeNormal + 0.6
+            : preset.edgeStrokeNormal;
+        const pathOp =
+          isActive || hovered
+            ? 1
+            : animTransitionFocus
+              ? dimEdgePathOp
+              : 0.68;
 
-          if (e.from === e.to) {
-            const { d, lx, ly } = selfLoopPath(a);
-            const op = highlighted || hovered ? 1 : 0.68;
-            return (
-              <g
-                key={key}
-                opacity={op}
-                className="cursor-default"
-                onMouseEnter={() => setHoverEdge(key)}
-                onMouseLeave={() => setHoverEdge(null)}
-              >
-                <path
-                  d={d}
-                  fill="none"
-                  stroke={strokeColor}
-                  strokeWidth={strokeW}
-                  markerEnd={`url(#${markerId})`}
-                  className={edgeAnimPulse ? 'tm-diagram-edge-pulse' : undefined}
-                />
-                <rect
-                  x={lx - lw / 2}
-                  y={ly - lh / 2 - 4}
-                  width={lw}
-                  height={lh}
-                  rx={5}
-                  fill="#020617"
-                  fillOpacity={0.88}
-                  stroke="#334155"
-                  strokeWidth={0.8}
-                />
-                <text
-                  x={lx}
-                  y={ly}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  className={`fill-slate-200 ${preset.edgeTextClass}`}
-                >
-                  {label}
-                </text>
-              </g>
-            );
-          }
-
-          const { ex, ey, ix, iy } = anchorsForward(a, b);
-          const d = cubicEdgePath(ex, ey, ix, iy, ySkew);
-          const midX = (ex + ix) / 2;
-          const midY = (ey + iy) / 2 - preset.labelYOffset - ySkew * 0.15;
-          const op = highlighted || hovered ? 1 : 0.65;
-
-          return (
-            <g
-              key={key}
-              opacity={op}
-              onMouseEnter={() => setHoverEdge(key)}
-              onMouseLeave={() => setHoverEdge(null)}
-              style={{ cursor: 'default' }}
-            >
-              <path
-                d={d}
-                fill="none"
-                stroke={strokeColor}
-                strokeWidth={strokeW}
-                markerEnd={`url(#${markerId})`}
-                className={edgeAnimPulse ? 'tm-diagram-edge-pulse' : undefined}
-              />
-              <rect
-                x={midX - lw / 2}
-                y={midY - lh / 2}
-                width={lw}
-                height={lh}
-                rx={5}
-                fill="#020617"
-                fillOpacity={0.9}
-                stroke={highlighted ? '#f59e0b' : '#334155'}
-                strokeWidth={highlighted ? 1 : 0.75}
-              />
-              <text
-                x={midX}
-                y={midY}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                className={`fill-slate-100 ${preset.edgeTextClass}`}
-              >
-                {label}
-              </text>
-            </g>
-          );
-        })}
-      {machine.states.map((s) => {
-        const n = nodes[s];
-        if (!n) return null;
-        const isAccept = s === machine.accept;
-        const isReject = s === machine.reject;
-        const isCurrent = s === stateForNodes;
-        const showDestHint =
-          destinationHintState != null &&
-          s === destinationHintState &&
-          s !== stateForNodes;
-        const { cx, cy, w, h } = n;
-        const x0 = cx - w / 2;
-        const y0 = cy - h / 2;
-        const nodeOpacity = isCurrent
-          ? 1
-          : isAccept || isReject
-            ? 0.82
-            : 0.52;
-        const termOuterW = w + preset.outerRing * 2 + (isCurrent ? 4 : 0);
-        const termOuterH = h + preset.outerRing * 2 + (isCurrent ? 4 : 0);
         return (
           <g
-            key={s}
-            style={{
-              opacity: nodeOpacity,
-              transition: 'opacity 0.25s ease, transform 0.28s ease',
-              transform: isCurrent
-                ? `translate(${cx}px, ${cy}px) scale(1.08) translate(${-cx}px, ${-cy}px)`
-                : undefined,
-            }}
+            key={eg.key}
+            data-tm-edge-key={eg.key}
+            data-tm-edge-active={isActive ? 'true' : undefined}
+            data-tm-anim-focus={animTransitionFocus ? 'true' : undefined}
+            className="cursor-default"
+            style={{ cursor: 'default' }}
+            onMouseEnter={() => setHoverEdge(eg.key)}
+            onMouseLeave={() => setHoverEdge(null)}
           >
+            <path
+              d={eg.pathD}
+              fill="none"
+              stroke="transparent"
+              strokeWidth={hitStrokeW}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              pointerEvents="stroke"
+              style={{ opacity: pathOp }}
+            />
+            <path
+              d={eg.pathD}
+              fill="none"
+              stroke={strokeColor}
+              strokeWidth={strokeW}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              markerEnd={`url(#${markerId})`}
+              pointerEvents="none"
+              className={isAnimPulse ? 'tm-diagram-edge-pulse' : undefined}
+              style={{ opacity: pathOp }}
+            />
+          </g>
+        );
+      })}
+      <g
+        className="tm-diagram-nodes-spotlight"
+        style={{ opacity: animTransitionFocus ? 0.88 : 1 }}
+      >
+        {machine.states.map((s) => {
+          const n = nodes[s];
+          if (!n) return null;
+          const isAccept = s === machine.accept;
+          const isReject = s === machine.reject;
+          const isCurrent = s === stateForNodes;
+          const showDestHint =
+            destinationHintState != null &&
+            s === destinationHintState &&
+            s !== stateForNodes;
+          const { cx, cy, w, h } = n;
+          const x0 = cx - w / 2;
+          const y0 = cy - h / 2;
+          const nodeOpacity = isCurrent
+            ? 1
+            : isAccept || isReject
+              ? 0.82
+              : 0.52;
+          const termOuterW = w + preset.outerRing * 2 + (isCurrent ? 4 : 0);
+          const termOuterH = h + preset.outerRing * 2 + (isCurrent ? 4 : 0);
+          return (
+            <g
+              key={s}
+              style={{
+                opacity: nodeOpacity,
+                transition: 'opacity 0.25s ease, transform 0.28s ease',
+                transform: isCurrent
+                  ? `translate(${cx}px, ${cy}px) scale(1.08) translate(${-cx}px, ${-cy}px)`
+                  : undefined,
+              }}
+            >
             {showDestHint ? (
               <rect
                 x={x0 - 5}
@@ -449,6 +366,125 @@ export function StateDiagramViewer({
               className={`fill-slate-50 ${preset.stateTextClass}`}
             >
               {s}
+            </text>
+          </g>
+          );
+        })}
+      </g>
+      {edgeLayouts.map((eg) => {
+        const { isActive, isAnimPulse } = edgeHighlightByKey.get(eg.key)!;
+        const hovered = hoverEdge === eg.key;
+        const inSpotlight = isActive && animTransitionFocus;
+        const labelOp =
+          isActive || hovered
+            ? 1
+            : animTransitionFocus
+              ? dimLabelGroupOp
+              : 0.9;
+
+        const chipFill = (() => {
+          if (!isActive) return '#020617';
+          if (animTransitionFocus) {
+            return isAnimPulse ? '#c2410c' : '#b45309';
+          }
+          return isAnimPulse ? '#78350f' : '#451a03';
+        })();
+
+        /** Inactive: dark muted rims; active: bright amber/yellow (unchanged). */
+        const chipStroke = (() => {
+          if (!isActive) {
+            if (animTransitionFocus) {
+              return hovered ? '#334155' : '#0c1222';
+            }
+            return hovered ? '#64748b' : '#475569';
+          }
+          if (animTransitionFocus) {
+            return isAnimPulse ? '#fef9c3' : '#fde047';
+          }
+          return isAnimPulse ? '#fde047' : '#fbbf24';
+        })();
+
+        const chipStrokeW = isActive
+          ? animTransitionFocus
+            ? isAnimPulse
+              ? 2.85
+              : 2.55
+            : isAnimPulse
+              ? 2.35
+              : 2
+          : animTransitionFocus
+            ? 1.05
+            : 1;
+
+        const chipPadY = size === 'expanded' ? 2 : 1.5;
+        const chipExtraH = size === 'expanded' ? 4 : 3;
+        const chipRx = size === 'expanded' ? 6 : 5;
+
+        const labelSpotlightClass = [
+          isAnimPulse ? 'tm-diagram-edge-label-pulse' : '',
+          inSpotlight && !isAnimPulse ? 'tm-diagram-edge-label-spotlight' : '',
+        ]
+          .join(' ')
+          .trim();
+
+        const labelTransform =
+          inSpotlight
+            ? `translate(${eg.lx}, ${eg.ly}) scale(1.08) translate(${-eg.lx}, ${-eg.ly})`
+            : undefined;
+
+        return (
+          <g
+            key={`${eg.key}-label`}
+            data-tm-edge-key={eg.key}
+            data-tm-edge-active={isActive ? 'true' : undefined}
+            data-tm-anim-focus={animTransitionFocus ? 'true' : undefined}
+            pointerEvents="none"
+            className={labelSpotlightClass || undefined}
+            style={{
+              opacity: labelOp,
+              transform: labelTransform,
+            }}
+          >
+            <rect
+              x={eg.lx - eg.lw / 2}
+              y={eg.ly - eg.lh / 2 - chipPadY}
+              width={eg.lw}
+              height={eg.lh + chipExtraH}
+              rx={chipRx}
+              fill={chipFill}
+              fillOpacity={
+                isActive
+                  ? 1
+                  : animTransitionFocus && !hovered
+                    ? 0.72
+                    : 0.97
+              }
+              stroke={chipStroke}
+              strokeWidth={chipStrokeW}
+              strokeOpacity={
+                isActive
+                  ? 1
+                  : animTransitionFocus && !hovered
+                    ? 0.88
+                    : 0.94
+              }
+            />
+            <text
+              x={eg.lx}
+              y={eg.ly}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              className={
+                isActive
+                  ? animTransitionFocus
+                    ? `fill-yellow-50 ${preset.edgeTextClass} font-bold`
+                    : `fill-amber-50 ${preset.edgeTextClass} font-semibold`
+                  : animTransitionFocus && !hovered
+                    ? `fill-slate-500 ${preset.edgeTextClass}`
+                    : `fill-slate-100 ${preset.edgeTextClass}`
+              }
+            >
+              {eg.label}
             </text>
           </g>
         );
@@ -520,10 +556,17 @@ export function StateDiagramExpandable({
     [machine, layout]
   );
 
-  const expandedViewBox = useMemo(() => {
-    const p = SIZE_PRESETS.expanded;
-    return computeDiagramViewBox(expandedNodes, machine, p.padding);
-  }, [expandedNodes, machine]);
+  /** Full SVG extent including edge labels — must match modal `StateDiagramViewer` viewBox. */
+  const expandedScene = useMemo(
+    () =>
+      computeStateDiagramScene(
+        machine,
+        expandedNodes,
+        'expanded',
+        diagramScenePreset('expanded')
+      ),
+    [expandedNodes, machine]
+  );
 
   const resetZoom = useCallback(() => {
     setZoom(1);
@@ -539,13 +582,13 @@ export function StateDiagramExpandable({
     const cr = el.getBoundingClientRect();
     const boxW = Math.max(80, cr.width - pad);
     const boxH = Math.max(80, cr.height - pad);
-    const scaleW = boxW / expandedViewBox.w;
-    const scaleH = boxH / expandedViewBox.h;
+    const scaleW = boxW / expandedScene.vw;
+    const scaleH = boxH / expandedScene.vh;
     const next = Math.min(scaleW, scaleH) * 0.92;
     setZoom(
       Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.round(next * 100) / 100))
     );
-  }, [expandedViewBox.h, expandedViewBox.w]);
+  }, [expandedScene.vh, expandedScene.vw]);
 
   useEffect(() => {
     if (!open) return;

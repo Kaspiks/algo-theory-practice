@@ -18,6 +18,49 @@
   animation: tm-diagram-edge-pulse 1.35s ease-in-out infinite;
 }
 
+/** Transition label chip: strong glow in sync with edge pulse during step animation */
+@keyframes tm-diagram-edge-label-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 5px rgb(253 224 71 / 0.55))
+      drop-shadow(0 0 12px rgb(251 191 36 / 0.35));
+  }
+  50% {
+    filter: drop-shadow(0 0 14px rgb(254 249 195 / 0.75))
+      drop-shadow(0 0 22px rgb(251 191 36 / 0.45));
+  }
+}
+
+.tm-diagram-edge-label-pulse {
+  animation: tm-diagram-edge-label-pulse 1.35s ease-in-out infinite;
+}
+
+/** Active label during transition-focus when edge pulse class is off (rare phase): soft breathing halo */
+@keyframes tm-diagram-edge-label-spotlight {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 8px rgb(253 224 71 / 0.45))
+      drop-shadow(0 0 2px rgb(254 252 232 / 0.5));
+  }
+  50% {
+    filter: drop-shadow(0 0 18px rgb(253 224 71 / 0.65))
+      drop-shadow(0 0 4px rgb(255 255 255 / 0.35));
+  }
+}
+
+.tm-diagram-edge-label-spotlight {
+  animation: tm-diagram-edge-label-spotlight 1.5s ease-in-out infinite;
+}
+
+/** Full-viewBox veil during transition-focus (under edges/nodes/labels) */
+.tm-diagram-spotlight-underlay {
+  transition: opacity 0.38s ease;
+}
+
+.tm-diagram-nodes-spotlight {
+  transition: opacity 0.38s ease;
+}
+
 @keyframes tm-node-destination-hint {
   0%,
   100% {
@@ -94,7 +137,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .tm-diagram-spotlight-underlay,
+  .tm-diagram-nodes-spotlight {
+    transition: none;
+  }
+
   .tm-diagram-edge-pulse,
+  .tm-diagram-edge-label-pulse,
+  .tm-diagram-edge-label-spotlight,
   .tm-node-destination-hint,
   .tm-node-state-entry,
   .tm-tape-write-pulse,

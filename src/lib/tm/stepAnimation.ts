@@ -1,4 +1,5 @@
 import type {
+  StateId,
   TapeModel,
   TMConfiguration,
   TransitionFired,
@@ -230,4 +231,58 @@ export function edgeGraphicMatchesFired(
     fired.to === e.to &&
     edgeLabelMatchesFired(e.label, fired)
   );
+}
+
+/**
+ * Stable graphic identity for one diagram edge (path + label chip). `key` matches
+ * `StateDiagramViewer` / `computeStateDiagramScene` row keys.
+ */
+export type DiagramTransitionGraphic = {
+  key: string;
+  from: StateId;
+  to: StateId;
+  fullLabel: string;
+};
+
+export interface DiagramEdgeHighlightState {
+  /** Active styling: `transitionHighlight ?? lastTransition` matches this graphic. */
+  isActive: boolean;
+  /** Pulse during step-animation phases while `transitionHighlight` matches. */
+  isAnimPulse: boolean;
+}
+
+/**
+ * Single source of truth for edge path + label highlight. Uses `fullLabel` (merged
+ * transition string), not the truncated display `label`.
+ */
+export function computeDiagramEdgeHighlight(
+  eg: Pick<DiagramTransitionGraphic, 'from' | 'to' | 'fullLabel'>,
+  args: {
+    edgeHighlightSource: TransitionFired | undefined;
+    transitionHighlight: TransitionFired | undefined;
+    pulseActiveTransitionEdge: boolean;
+  }
+): DiagramEdgeHighlightState {
+  const graphic = { from: eg.from, to: eg.to, label: eg.fullLabel };
+  const isActive = Boolean(
+    args.edgeHighlightSource &&
+      edgeGraphicMatchesFired(graphic, args.edgeHighlightSource)
+  );
+  const isAnimPulse = Boolean(
+    args.pulseActiveTransitionEdge &&
+      args.transitionHighlight &&
+      edgeGraphicMatchesFired(graphic, args.transitionHighlight)
+  );
+  return { isActive, isAnimPulse };
+}
+
+/**
+ * When true, the diagram may dim non-active transition labels/edges.
+ * Matches MvpPlayer: set only while `transitionHighlight` is the in-flight `fired`
+ * (edge / write / head_from / head_to); cleared in `state` phase and when idle.
+ */
+export function isTransitionFocusDimmingActive(
+  transitionHighlight: TransitionFired | undefined
+): boolean {
+  return transitionHighlight != null;
 }
