@@ -1,6 +1,6 @@
 # Hints and Feedback — Reusable Library
 
-> **Source status:** Generic pedagogy for TM practice. **Localize** wording to match instructor style when `materials/` slides/homework are available.
+> **Source status:** Generic pedagogy + **exam-style** mistakes derived from `materials/exam/exam.md` TM tasks. Localize to instructor style when slides/homework are available.
 
 Hints are ordered **weak → strong**. Feedback should be **specific**, **non-accusatory**, and tied to **skills** (`skills-map.md`) and **patterns** (`tm-patterns.md`).
 
@@ -101,7 +101,32 @@ Avoid:
 
 ---
 
-## 7. Mapping hints to skills
+## 7. Exam-style mistakes (from exam TM problems)
+
+Map these to **feedback** and **hints** in `exercise-bank.md` and pack copy.
+
+| ID | Mistake | Typical wrong outcome | Hint / feedback angle |
+|----|---------|----------------------|------------------------|
+| EX.1 | Treat \(a^k b^k a^k\) as “three blocks exist” only | Accepts `aabaaa` | “Equal **k** for all three blocks—pair counts, not just shape.” |
+| EX.2 | Pair one `a` with one `b` when language needs \(b^{2k}\) | Accepts `abb` for \(a^1b^2\) once but wrong generalization | “Each `a` must account for **two** `b`s (or match the exam’s stated loop exactly).” |
+| EX.3 | Off-by-one: \(2k\) vs \(2k+1\) | Wrong answer for EXAM 3 Q1 | “Count whether the **last** sweep needs an extra `b`.” |
+| EX.4 | “More `a` than `b`” but reject when counts tie | Rejects `ab` incorrectly or accepts `ba` | “Tie goes to **not** ‘strictly more `a`’ unless the language says otherwise.” |
+| EX.5 | Move **L** vs **R** after erase in sweep algorithm | Trace diverges from EXAM 1 Q3 spec | “Re-read the bullet: after erase, which direction hits the blank first?” |
+| EX.6 | Forget to **write back** on read-only leg | Tape corrupted, wrong next δ | “If the step says ‘check symbol’, does it also say erase?” |
+| EX.7 | Mark `a` as `*` but forget `*` in tape alphabet | Undefined transition / crash | “`*` is a **tape symbol**—δ must handle it in later states.” |
+| EX.8 | Majority algorithm: delete wrong symbol class | Imbalance reversed | “Each round marks an `a`, then removes one **non-`a`** when returning.” |
+| EX.9 | Runtime \(O(n)\) for linear rounds × linear scans | Underestimate EXAM 1 Q3 / 2 Q3 | “How many **outer** iterations? Each touches how many cells?” |
+| EX.10 | Empty string edge case for \(k \ge 0\) | Rejects `⊔` or accepts illegal ε shape | “Is ε in the language? Where does the machine halt on blank-only tape?” |
+
+**Reusable feedback lines**
+
+- “That construction accepts **w = …** which violates the **ratio** in the definition.”
+- “Your next configuration skips the **return-to-start** phase the exam algorithm requires.”
+- “**Head direction** after this write does not match the stated procedure.”
+
+---
+
+## 8. Mapping hints to skills
 
 | Hint cluster | Skills |
 |--------------|--------|
@@ -110,10 +135,11 @@ Avoid:
 | MT.* | S1.3, S4.2 |
 | ST.* | S4.1, S3.x |
 | TRA.* | S2.2 |
+| EX.* | S3.x, S4.x, S5.T* |
 
 ---
 
-## 8. Explain-after-solution structure (recommended)
+## 9. Explain-after-solution structure (recommended)
 
 Each explanation block:
 

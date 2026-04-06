@@ -27,6 +27,13 @@ describe('exercise pack authoring', () => {
 
   for (const ex of exercisePack) {
     it(`first-step answer matches engine: ${ex.id}`, () => {
+      if (
+        ex.mode === 'strategy' ||
+        ex.mode === 'missing_transition' ||
+        ex.mode === 'language_decode'
+      ) {
+        return;
+      }
       const machine = getMachineById(ex.machineId);
       expect(machine).toBeDefined();
       const c0 = initialConfiguration(

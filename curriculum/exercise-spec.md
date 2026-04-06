@@ -1,6 +1,6 @@
 # Exercise Specification — TM Study App
 
-> **Source status:** Shaped by `prompts/tm_curriculum_agent_input.md` and the app architect rule (question modes). **Refine** with `materials/homework/hw1.pdf` problem wording and difficulty when materials exist.
+> **Source status:** Shaped by `prompts/tm_curriculum_agent_input.md`, **`materials/exam/exam.md`**, and the app architect rule. **Refine** with `materials/homework/` when present. **Exercise payloads** for import: `exercise-bank.md`.
 
 **Global constraints for v1 content:**
 
@@ -97,12 +97,26 @@ All exercise types should support:
 
 ## Difficulty rubric (authoring)
 
-| Level | Description |
-|-------|-------------|
-| 1 | ≤ 3 states, unary/binary alphabet, 1–2 patterns, traces ≤ 8 steps |
-| 2 | 4–6 states, 1 marker, typical homework size |
-| 3 | Multiple markers or zig-zag, traces up to ~20 steps with cap |
-| 4 | Exam-style construction understanding without full TM display (strategy + partial machine) |
+| Level | Label | Description |
+|-------|--------|-------------|
+| 1 | **easy** | ≤ 3 states, small alphabet, 1–2 patterns, traces ≤ 8 steps |
+| 2 | **medium** | 4–6 states, one marker, homework-like |
+| 3 | **hard** | Multi-marker / zig-zag, traces up to ~20 steps (with UI cap) |
+| 4 | **exam** | EXAM 1–3 style: full language design, tricky invariants, or long strategy |
+
+---
+
+## Exam alignment (`materials/exam/exam.md`)
+
+| Exam | TM-relevant item | Preferred modes |
+|------|------------------|-----------------|
+| 1 Q1 | \(a^k b^k a^k\) | `strategy`, then trace on implemented TM when available |
+| 1 Q3 | \(a^{k}b^{2k}\) algorithm + **time** | `strategy` + `tracing`; runtime as separate MCQ |
+| 2 Q1 | more `a` than `b` | `strategy`, `tape_result` on small \(M\) |
+| 2 Q3 | ≥ half `a` (mark `*`) + **time** | `strategy` + `tracing`; runtime MCQ |
+| 3 Q1 | \(a^k b^{2k+1}\) | `strategy`, `missing_transition` on partial \(M\) |
+
+Authoring rule: **mirror exam language** in `title` / `description` where copyright permits (paraphrase if needed).
 
 ---
 
@@ -116,6 +130,13 @@ All exercise types should support:
 | Reveal answer | Allowed | Disallowed or penalized |
 
 *(Exact rules are product policy; architect encodes in state.)*
+
+---
+
+## Exercise bank import
+
+- Canonical **authoring list**: `curriculum/exercise-bank.md`.
+- Each bank entry includes fields needed to create `MvpExercise` rows or future JSON; `machine_ref: TBD` means **content_agent** must add a machine under `src/content/machines/` before shipping.
 
 ---
 

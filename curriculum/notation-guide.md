@@ -1,6 +1,6 @@
 # Notation Guide — Turing Machines (Course-Aligned)
 
-> **Source status:** `materials/` was unavailable at generation time. This guide matches **common Sipser-based** courses and the filenames in `prompts/tm_curriculum_agent_input.md` (ThAlgo TM lectures). **Override any conflicting detail** with the actual slides/PDF once added.
+> **Source status:** Align with **`materials/exam/exam.md`** (standard one-tape model) and, when present, **`materials/reference/Sipser.pdf`**. **Override** any conflicting detail with instructor slides or homework.
 
 ---
 

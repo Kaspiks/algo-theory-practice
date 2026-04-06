@@ -3,6 +3,7 @@ import { endsInOneMachine } from '@/content/machines/endsInOne';
 import { contains001Machine } from '@/content/machines/contains001';
 import { returnLeftSentinelMachine } from '@/content/machines/returnLeftSentinel';
 import { markZerosMachine } from '@/content/machines/markZeros';
+import { markFirstAMachine } from '@/content/machines/markFirstA';
 import { scanBinaryMachine } from '@/content/machines/scanBinary';
 import type { TuringMachineDefinition } from '@/types/tm';
 
@@ -13,6 +14,7 @@ const all = [
   contains001Machine,
   returnLeftSentinelMachine,
   markZerosMachine,
+  markFirstAMachine,
 ] as const;
 
 export const machineById = new Map<string, TuringMachineDefinition>(
@@ -30,4 +32,5 @@ export {
   contains001Machine,
   returnLeftSentinelMachine,
   markZerosMachine,
+  markFirstAMachine,
 };

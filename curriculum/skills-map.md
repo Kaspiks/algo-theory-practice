@@ -1,101 +1,106 @@
-# Skills Map — Turing Machines (Exam Prep)
+# Skills Map — Turing Machines (Exam Pass-Oriented)
 
-> **Source status:** At generation time, `materials/` (lectures, homework, reference) was **not present** in this repository. This map follows `prompts/tm_curriculum_agent_input.md`, the TM curriculum agent rule, and **Sipser-style** single-tape deterministic TM conventions. **Reconcile every skill** against `materials/lectures/ThAlgo-01_*`, `ThAlgo-02_*`, and `materials/homework/hw1.pdf` when those files are available.
+> **Primary source:** `materials/exam/exam.md` — TM questions reward **correct constructions**, **correct traces**, and **runtime reasoning**.  
+> **Secondary:** `materials/homework/` (not in repo yet — add alignment rows when available).  
+> **Reference:** `materials/reference/Sipser.pdf` — use for standard examples (\(a^n b^n\), markers, simulations) when file is present.
 
-Skills are ordered from foundational to exam-level construction. The study app should support practice along this ladder.
-
----
-
-## Tier 0 — Vocabulary and model
-
-| ID | Skill | Success criteria |
-|----|--------|------------------|
-| S0.1 | Name the TM components | Student can list states, input alphabet, tape alphabet, transition function, start state, accept/reject (or halting) behavior. |
-| S0.2 | Distinguish **Σ** vs **Γ** | Input symbols only on tape initially; tape may use extra symbols (markers, blanks). |
-| S0.3 | Explain the tape and head | Infinite tape (typically blank elsewhere), head reads one cell per step, tape can grow only as head moves into new blank cells. |
-| S0.4 | Configuration intuition | Can describe “current tape contents (with head position), current state” as a snapshot; optional: formal `u q v` notation (see `notation-guide.md`). |
+Skills are ordered for **exam success**: what you must do **in the room** under time pressure.
 
 ---
 
-## Tier 1 — Reading a machine
+## Tier 0 — Vocabulary and model (must be automatic)
 
-| ID | Skill | Success criteria |
-|----|--------|------------------|
-| S1.1 | Read a state diagram | Given a diagram, identify start, accept, reject (if shown), and interpret each edge label. |
-| S1.2 | Parse a transition | Given `δ(q, a) = (q', b, D)`, state what is read, written, next state, and head direction `D ∈ {L, R}` (and `S` if course uses stay). |
-| S1.3 | Handle **undefined** transitions | Know that missing transition = reject/halt (per course convention in `notation-guide.md`). |
-
----
-
-## Tier 2 — Tracing (one step and full runs)
-
-| ID | Skill | Success criteria |
-|----|--------|------------------|
-| S2.1 | Apply **one** step | From a configuration, produce the next state, tape symbol under head (after write), and head position. |
-| S2.2 | Trace until halt | Follow transitions until accept, reject, or infinite loop; record each configuration if asked. |
-| S2.3 | Predict **halting vs looping** on small inputs | For simple machines, tell whether a given input eventually halts. |
-| S2.4 | Relate trace to **language** | Given a machine and input, answer accept/reject; given a machine, describe or test membership for short strings. |
+| ID | Skill | Exam relevance |
+|----|--------|----------------|
+| S0.1 | Name TM components | Needed to write “diagram or command list”. |
+| S0.2 | \(\Sigma\) vs \(\Gamma\) | Extra markers (\(X\), `*`) appear in exam algorithms. |
+| S0.3 | Tape + head | EXAM algorithms assume one tape, input initially on tape. |
+| S0.4 | Configuration | Tracing and “next step” questions. |
 
 ---
 
-## Tier 3 — Operational patterns (recognize in traces)
+## Tier 1 — Reading a machine (fast accuracy)
 
-| ID | Skill | Success criteria |
-|----|--------|------------------|
-| S3.1 | **Scan right** | Find a symbol, find blank, find end of input block. |
-| S3.2 | **Return left** | Return to left end or to a marked home position. |
-| S3.3 | **Mark / stamp** | Replace a symbol with a marker, later restore or distinguish regions. |
-| S3.4 | **Match / compare** | Pair symbols (e.g. first half vs second half, balanced brackets style). |
-| S3.5 | **Copy / shift** | Duplicate or move a block with separators. |
-| S3.6 | **Count / unary arithmetic** | Increment/decrement tallies separated by markers. |
-
-*Detailed pattern catalog: `tm-patterns.md`.*
+| ID | Skill | Exam relevance |
+|----|--------|----------------|
+| S1.1 | Read state diagram | Exam asks for diagram **or** transition list. |
+| S1.2 | Parse \(\delta(q,a)=(q',b,D)\) | No arithmetic errors on write/move. |
+| S1.3 | Undefined transition | Must match course convention (usually reject/halt). |
 
 ---
 
-## Tier 4 — Design and explanation (exam-style)
+## Tier 2 — One-step and short traces (high frequency)
 
-| ID | Skill | Success criteria |
-|----|--------|------------------|
-| S4.1 | State the **idea** in plain language | “Scan to end, come back, mark first unmatched…” before formal states. |
-| S4.2 | Decompose into **phases** | Break construction into finite phases (each implementable as state groups). |
-| S4.3 | Argue **correctness** briefly | Invariants: what markers mean, what each phase guarantees, why the machine accepts exactly the target language. |
-| S4.4 | Handle **edge cases** | Empty string, single symbol, all same symbols, no delimiter. |
-
----
-
-## Tier 5 — Course context (light touch for TM app)
-
-These matter for the **course** but are **lower priority** for the first TM-tracing app build (per curriculum input):
-
-| ID | Skill | Note |
-|----|--------|------|
-| S5.1 | Church–Turing thesis (informal) | Framing only. |
-| S5.2 | TM variants vs single-tape DTM | Equivalence ideas; app focuses on one model. |
-| S5.3 | Decidable vs recognizable | Language-level; optional quiz copy. |
-
-Lectures `ThAlgo-03`–`07` (diagonalization, reductions, PCP, recursion theorem, theories) support **later** content packs; they are not the primary focus of the initial TM gameplay loop.
+| ID | Skill | Exam relevance |
+|----|--------|----------------|
+| S2.1 | **One step** from configuration | Tape-result and next-transition drills = exam micro-skills. |
+| S2.2 | Trace until halt | Proof of understanding for constructed machines. |
+| S2.3 | Halting vs looping | Sanity-check your construction. |
+| S2.4 | Accept/reject for given \(w\) | Quick membership tests on your TM. |
 
 ---
 
-## Mapping skills → app capabilities
+## Tier 3 — Pattern recognition (exam TM problems are pattern-based)
 
-| App capability | Primary skills |
-|----------------|----------------|
-| Tape + head visualization | S0.2–S0.4, S2.1 |
-| “What happens next?” (transition MCQ) | S1.1–S1.3, S2.1 |
-| Full trace / step-through | S2.2, S3.x |
-| “Final tape / accept?” | S2.4 |
-| Missing transition drill | S1.3, S4.2 |
-| Strategy / phase ordering | S3.x, S4.1–S4.2 |
+| ID | Skill | Maps to exam |
+|----|--------|--------------|
+| S3.1 | Scan right (P1) | EXAM 1 Q3 step 2 “to first blank”. |
+| S3.2 | Return left (P2) | “Return to start” between rounds. |
+| S3.3 | Mark / stamp (P3) | EXAM 2 Q3 `*` on `a`. |
+| S3.4 | Match / compare (P4, P6, P8) | \(a^k b^k a^k\), \(a^k b^{2k}\). |
+| S3.5 | Ratio / triple block (P10, P11) | EXAM 1 Q1, EXAM 3 Q1. |
+| S3.6 | Majority / comparison (P13, P14) | EXAM 2 Q1, Q3. |
+
+*Catalog:* `tm-patterns.md`.
 
 ---
 
-## Homework alignment placeholder
+## Tier 4 — Design and write-up (10-point TM questions)
 
-When `materials/homework/hw1.pdf` is available, add a subsection here:
+| ID | Skill | Exam relevance |
+|----|--------|----------------|
+| S4.1 | State idea in **plain language** before states | Graders give partial credit for correct phases. |
+| S4.2 | Decompose into **phases** | EXAM-style: “repeat: … until …”. |
+| S4.3 | **Correctness sketch** | Invariants: what a mark means; why only \(L\) is accepted. |
+| S4.4 | **Edge cases** | \(k=0\), wrong symbol, order violations (\(ba\), extra blocks). |
+| S4.5 | Relate implementation to **given pseudo-algorithm** | EXAM 1 Q3: your analysis must match the stated loop. |
 
-- **HW1 problem types** → skill IDs
-- **Required constructions** → link to `tm-patterns.md` pattern IDs
+---
 
-Until then, assume HW1-style tasks include: **trace given machine**, **design machine for a regular/context-free style language**, **simple non-trivial language** (e.g. patterns with counting or matching).
+## Tier 5 — Runtime for TM sweeps (exam-specific)
+
+| ID | Skill | Exam relevance |
+|----|--------|----------------|
+| S5.T1 | Count **passes** over tape | Each pass often \(O(n)\). |
+| S5.T2 | Multiply passes × cost per pass | Typical answer \(O(n^2)\) for nested linear scans. |
+| S5.T3 | Recognize when a single scan suffices | Rare for counting languages; don’t guess \(O(n)\) without justification. |
+
+*Note:* Big-O MCQs (EXAM 3 Q3) mix TM and pure math — only S5.T* is TM-app scope.
+
+---
+
+## Tier 6 — Course context (lower priority in TM app)
+
+Decidable / recognizable, reductions, NP certificates — **EXAM 1–3** include these but they are **separate** from the TM tracer app. Link only for “full course” study packs.
+
+---
+
+## Mapping skills → app + exam
+
+| Exam task | Skills | Suggested app mode |
+|-----------|--------|-------------------|
+| Describe TM for language | S4.x, S3.x | `strategy` + paper; optional trace on authored machine |
+| Trace given TM | S2.1–S2.2 | `next_transition`, `tracing` |
+| One-step / config | S2.1 | `next_transition`, `tape_result` |
+| Runtime of sweep TM | S5.T1–T3 | MCQ / study note (outside engine if needed) |
+
+---
+
+## Homework alignment (placeholder)
+
+When homework PDFs exist in `materials/homework/`:
+
+- Add table: **HW problem** → skill IDs → pattern IDs.
+- Prefer **same wording** as assignments for transfer.
+
+Until then, **`materials/exam/exam.md`** is the **authoritative** mirror for TM difficulty and style.

@@ -14,7 +14,11 @@ export type ExerciseCategory =
   | 'reject_bad_symbol'
   | 'return_left'
   | 'marking'
-  | 'homework_style';
+  | 'homework_style'
+  | 'substring'
+  | 'exam_prep'
+  | 'complexity_tm'
+  | 'language_decode';
 
 export type ExerciseDifficulty = 1 | 2 | 3 | 4;
 
@@ -23,7 +27,8 @@ export type QuestionMode =
   | 'tape_result'
   | 'missing_transition'
   | 'strategy'
-  | 'tracing';
+  | 'tracing'
+  | 'language_decode';
 
 export interface ExerciseSetup {
   input: string;
@@ -82,9 +87,11 @@ export interface MissingTransitionExercise extends ExerciseBase {
   mode: 'missing_transition';
 }
 
-/** Placeholder for future drills; not used in the current pack. */
+/** Conceptual / exam-style MCQ: no TM step is graded; machine is for context only. */
 export interface StrategyExercise extends ExerciseBase {
   mode: 'strategy';
+  textOptions: { id: string; label: string }[];
+  textCorrectOptionId: string;
 }
 
 /**
@@ -102,12 +109,46 @@ export interface TracingExercise extends ExerciseBase {
   };
 }
 
+/** Single-select MCQ within a language-decode step. */
+export interface LanguageDecodeMcqStep {
+  prompt: string;
+  options: { id: string; label: string }[];
+  correctOptionId: string;
+  feedbackIfCorrect: string;
+  feedbackIfWrong: string;
+}
+
+/** Multi-select: learner must select exactly the ids in `correctChoiceIds`. */
+export interface LanguageDecodeMultiStep {
+  prompt: string;
+  choices: { id: string; label: string }[];
+  correctChoiceIds: string[];
+  feedbackIfCorrect: string;
+  feedbackIfWrong: string;
+}
+
+/**
+ * Guided formal-language → examples → conditions → TM strategy.
+ * `machineId` / `setup` are unused by the player (kept for pack uniformity).
+ */
+export interface LanguageDecodeExercise extends ExerciseBase {
+  mode: 'language_decode';
+  languageNotation: string;
+  alphabetNote?: string;
+  plainEnglish: LanguageDecodeMcqStep;
+  examplesInLanguage: LanguageDecodeMultiStep;
+  examplesNotInLanguage: LanguageDecodeMultiStep;
+  condition: LanguageDecodeMcqStep;
+  tmStrategy: LanguageDecodeMcqStep;
+}
+
 export type MvpExercise =
   | NextTransitionExercise
   | TapeResultExercise
   | MissingTransitionExercise
   | StrategyExercise
-  | TracingExercise;
+  | TracingExercise
+  | LanguageDecodeExercise;
 
 /** Grading output for tape-result submits (UI / analytics). */
 export interface TapeResultGradingPayload {

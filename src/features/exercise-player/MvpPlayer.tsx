@@ -10,6 +10,7 @@ import { TapeViewer } from '@/components/tm/TapeViewer';
 import { HINT_TEXT } from '@/content/hints';
 import { FeedbackPanel } from '@/features/exercise-player/FeedbackPanel';
 import { QuestionPanel } from '@/features/exercise-player/QuestionPanel';
+import { StrategyQuestionPanel } from '@/features/exercise-player/StrategyQuestionPanel';
 import { TapeResultQuestion } from '@/features/exercise-player/TapeResultQuestion';
 import {
   buildNextTransitionMcq,
@@ -37,7 +38,11 @@ import {
   tapeAfterWriteOnly,
 } from '@/lib/tm/stepAnimation';
 import { readSymbol } from '@/lib/tm/tape';
-import type { MvpExercise, TapeResultExercise } from '@/types/mvp';
+import type {
+  MvpExercise,
+  StrategyExercise,
+  TapeResultExercise,
+} from '@/types/mvp';
 import type {
   HaltStatus,
   TMConfiguration,
@@ -112,6 +117,7 @@ export function MvpPlayer({
   const [previewCorrectOptionId, setPreviewCorrectOptionId] = useState<
     string | null
   >(null);
+  const [strategySolved, setStrategySolved] = useState(false);
 
   const configRef = useRef(config);
   const machineRef = useRef(machine);
@@ -150,6 +156,10 @@ export function MvpPlayer({
   useEffect(() => {
     playingRef.current = playing;
   }, [playing]);
+
+  useEffect(() => {
+    setStrategySolved(false);
+  }, [exercise.id]);
 
   const animSpeedRef = useRef(animSpeed);
   useEffect(() => {
@@ -206,6 +216,7 @@ export function MvpPlayer({
   const isAnimating = stepAnim !== null;
 
   const isTapeResultMode = exercise.mode === 'tape_result';
+  const isStrategyMode = exercise.mode === 'strategy';
 
   const staticFirstMcq = useMemo(() => {
     if (exercise.mode !== 'next_transition' && exercise.mode !== 'tracing') {
@@ -222,7 +233,13 @@ export function MvpPlayer({
   }, [exercise, stepCount, machine, config]);
 
   const transitionMcq = useMemo(() => {
-    if (exercise.mode === 'tape_result' || halted) return null;
+    if (
+      exercise.mode === 'tape_result' ||
+      exercise.mode === 'strategy' ||
+      halted
+    ) {
+      return null;
+    }
     if (staticFirstMcq) {
       const correctOptionId =
         exercise.mode === 'next_transition' || exercise.mode === 'tracing'
@@ -588,6 +605,27 @@ export function MvpPlayer({
   }, [runTapeResultPlaybackStep]);
 
   const handleSubmit = () => {
+    if (isStrategyMode) {
+      const sex = exercise as StrategyExercise;
+      if (!selectedId || strategySolved || isAnimating) return;
+      if (selectedId === sex.textCorrectOptionId) {
+        setFeedback({
+          message: 'Correct.',
+          variant: 'success',
+          showExplanation: true,
+        });
+        setStrategySolved(true);
+      } else {
+        setFeedback({
+          message:
+            'Not quite. Use the explanation below and try another option.',
+          variant: 'error',
+          showExplanation: true,
+        });
+      }
+      return;
+    }
+
     if (!selectedId || halted || isAnimating || commitStepLockRef.current) {
       return;
     }
@@ -674,6 +712,7 @@ export function MvpPlayer({
     setSelectedId(null);
     setFeedback({ message: null, variant: 'neutral', showExplanation: false });
     setHintsShown(0);
+    setStrategySolved(false);
   };
 
   const skipAnimation = () => {
@@ -686,6 +725,7 @@ export function MvpPlayer({
   };
 
   const handleOracleStep = () => {
+    if (isStrategyMode) return;
     if (halted || isAnimating || commitStepLockRef.current) return;
     clearPlayTimer();
     clearPlaybackPreviewTimer();
@@ -709,6 +749,7 @@ export function MvpPlayer({
   };
 
   const handlePlay = () => {
+    if (isStrategyMode) return;
     if (halted || isAnimating || commitStepLockRef.current) return;
     setPlaying(true);
     const r = step(machine, config);
@@ -735,6 +776,7 @@ export function MvpPlayer({
   };
 
   const handleShowCorrectStep = () => {
+    if (isStrategyMode) return;
     if (halted || isAnimating || playerMode !== 'study') return;
     if (commitStepLockRef.current) return;
     clearPlaybackPreviewTimer();
@@ -768,7 +810,13 @@ export function MvpPlayer({
     <div className="space-y-6">
       <p className="text-sm text-slate-500">
         {exercise.category.replace(/_/g, ' ')} · difficulty {exercise.difficulty}{' '}
-        · {isTapeResultMode ? 'tape-result' : 'next-transition'} · steps:{' '}
+        ·{' '}
+        {isTapeResultMode
+          ? 'tape-result'
+          : isStrategyMode
+            ? 'strategy'
+            : 'next-transition'}{' '}
+        · steps:{' '}
         {stepCount}
         {halted ? ' · halted' : null}
         {isAnimating ? ' · animating' : null}
@@ -817,7 +865,7 @@ export function MvpPlayer({
             <button
               type="button"
               className="rounded-md border border-slate-600 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-40"
-              disabled={halted || isAnimating}
+              disabled={isStrategyMode || halted || isAnimating}
               onClick={handleOracleStep}
             >
               Step
@@ -825,7 +873,7 @@ export function MvpPlayer({
             <button
               type="button"
               className="rounded-md border border-slate-600 px-2 py-1 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-40"
-              disabled={halted || isAnimating || playing}
+              disabled={isStrategyMode || halted || isAnimating || playing}
               onClick={handlePlay}
             >
               Play
@@ -931,6 +979,17 @@ export function MvpPlayer({
                 playing && previewCorrectOptionId !== null && !isAnimating
               }
             />
+          ) : isStrategyMode ? (
+            <StrategyQuestionPanel
+              title={exercise.title}
+              description={exercise.description}
+              options={(exercise as StrategyExercise).textOptions}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              onSubmit={handleSubmit}
+              submitDisabled={strategySolved || isAnimating}
+              interactionLocked={isAnimating}
+            />
           ) : (
             <QuestionPanel
               title={exercise.title}
@@ -952,6 +1011,7 @@ export function MvpPlayer({
           />
           {feedback.variant === 'error' &&
           playerMode === 'study' &&
+          !isStrategyMode &&
           !halted &&
           !isAnimating ? (
             <button
