@@ -18,6 +18,65 @@
   animation: tm-diagram-edge-pulse 1.35s ease-in-out infinite;
 }
 
+@keyframes tm-construction-run-edge-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 3px rgb(56 189 248 / 0.45));
+  }
+  50% {
+    filter: drop-shadow(0 0 14px rgb(125 211 252 / 0.65));
+  }
+}
+
+.tm-construction-run-edge-active {
+  animation: tm-construction-run-edge-glow 1.25s ease-in-out infinite;
+}
+
+@keyframes tm-construction-run-node-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(251 191 36 / 0.25);
+  }
+  50% {
+    box-shadow: 0 0 18px 2px rgb(251 191 36 / 0.2);
+  }
+}
+
+.tm-construction-run-node-pulse {
+  animation: tm-construction-run-node-pulse 1.4s ease-in-out infinite;
+}
+
+/** TM construction: spotlight transition label (EdgeLabelRenderer chip) during playback */
+@keyframes tm-transition-label-spotlight-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 8px rgb(56 189 248 / 0.55))
+      drop-shadow(0 0 16px rgb(125 211 252 / 0.35));
+    box-shadow:
+      0 0 0 1px rgb(125 211 252 / 0.35),
+      0 0 22px rgb(56 189 248 / 0.25);
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgb(125 211 252 / 0.75))
+      drop-shadow(0 0 28px rgb(14 165 233 / 0.4));
+    box-shadow:
+      0 0 0 1px rgb(186 230 253 / 0.55),
+      0 0 32px rgb(56 189 248 / 0.35);
+  }
+}
+
+.tm-transition-edge-label-spotlight {
+  animation: tm-transition-label-spotlight-pulse 1.15s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tm-transition-edge-label-spotlight {
+    animation: none;
+    filter: drop-shadow(0 0 12px rgb(56 189 248 / 0.45));
+    box-shadow: 0 0 0 1px rgb(125 211 252 / 0.4);
+  }
+}
+
 /** Transition label chip: strong glow in sync with edge pulse during step animation */
 @keyframes tm-diagram-edge-label-pulse {
   0%,
@@ -149,7 +208,9 @@
   .tm-node-state-entry,
   .tm-tape-write-pulse,
   .tm-tape-head-move-pulse,
-  .tape-result-preview-pulse {
+  .tape-result-preview-pulse,
+  .tm-construction-run-edge-active,
+  .tm-construction-run-node-pulse {
     animation: none;
   }
 }

@@ -1,5 +1,10 @@
 /** Behavioral tests for TM construction mode (no diagram comparison). */
 
+import type { ConstructionMachineInput } from '@/lib/tm/constructionMachine';
+import type { TmSolutionStep } from '@/types/tmConstructionSolution';
+import { AKBK_REFERENCE_CONSTRUCTION_INPUT } from '@/content/tmConstruction/referenceMachines/akbk';
+import { CONSTRUCT_AKBK_SOLUTION_STEPS } from '@/content/tmConstruction/solutionSteps/constructAkBk';
+
 export type ConstructionExpectation = 'accept' | 'reject';
 
 export interface ConstructionTestCase {
@@ -17,6 +22,15 @@ export interface TmConstructionChallenge {
   maxSteps: number;
   acceptCases: ConstructionTestCase[];
   rejectCases: ConstructionTestCase[];
+  /** Optional tutor playback: step-by-step solution on the same canvas. */
+  solutionSteps?: TmSolutionStep[];
+  /**
+   * Machine used for the optional post-build tape demo (must match the final
+   * tutor diagram).
+   */
+  tutorTapeMachine?: ConstructionMachineInput;
+  /** Preset inputs for the tape demo (e.g. "aabb"). */
+  tutorDemoInputs?: string[];
 }
 
 const BLANK_NOTE =
@@ -30,6 +44,9 @@ export const TM_CONSTRUCTION_CHALLENGES: TmConstructionChallenge[] = [
       `Decide strings with equal numbers of a then b in order (including ε). ${BLANK_NOTE}`,
     inputAlphabet: ['a', 'b'],
     maxSteps: 400,
+    solutionSteps: CONSTRUCT_AKBK_SOLUTION_STEPS,
+    tutorTapeMachine: AKBK_REFERENCE_CONSTRUCTION_INPUT,
+    tutorDemoInputs: ['', 'ab', 'aabb', 'aab'],
     acceptCases: [
       { input: '', expect: 'accept' },
       { input: 'ab', expect: 'accept' },

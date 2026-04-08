@@ -27,7 +27,10 @@ import {
   type TmTransitionRule,
 } from '@/features/tm-construction/flowTypes';
 import { constructionGraphSignature } from '@/features/tm-construction/constructionSignature';
+import { TmConstructionTutorPanel } from '@/features/tm-construction/TmConstructionTutorPanel';
+import { TmConstructionEdgeContext } from '@/features/tm-construction/tmConstructionEdgeContext';
 import { TmStateNode } from '@/features/tm-construction/TmStateNode';
+import { TmTransitionEdge } from '@/features/tm-construction/TmTransitionEdge';
 import { buildMachineFromConstruction } from '@/lib/tm/constructionMachine';
 import {
   allConstructionTestsPassed,
@@ -37,6 +40,7 @@ import {
 import type { HeadMove } from '@/types/tm';
 
 const NODE_TYPES = { tmState: TmStateNode };
+const EDGE_TYPES = { tmTransition: TmTransitionEdge };
 
 function canonicalEdgeId(source: string, target: string): string {
   return `e_${source}_${target}`;
@@ -96,12 +100,23 @@ function newWorkStateId(nodes: Node<TmStateNodeData>[]): string {
   return `q${n}`;
 }
 
+type ConstructionWorkspaceMode = 'build' | 'tutor';
+
 export function TmConstructionWorkspace() {
   const [challengeId, setChallengeId] = useState(DEFAULT_CONSTRUCTION_CHALLENGE_ID);
+  const [workspaceMode, setWorkspaceMode] = useState<ConstructionWorkspaceMode>('build');
   const challenge = useMemo(
     () => getConstructionChallenge(challengeId)!,
     [challengeId]
   );
+
+  const hasTutor = Boolean(challenge.solutionSteps && challenge.solutionSteps.length > 0);
+
+  useEffect(() => {
+    if (!hasTutor && workspaceMode === 'tutor') {
+      setWorkspaceMode('build');
+    }
+  }, [hasTutor, workspaceMode]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes());
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<TmEdgeData>>([]);
@@ -134,11 +149,55 @@ export function TmConstructionWorkspace() {
     }
   }, [edges, selectedEdgeId]);
 
+  const onLabelOffsetCommit = useCallback(
+    (edgeId: string, offset: { x: number; y: number }) => {
+      setEdges((eds) =>
+        eds.map((e) =>
+          e.id === edgeId
+            ? {
+                ...e,
+                data: {
+                  ...(e.data as TmEdgeData),
+                  labelOffset: offset,
+                },
+              }
+            : e
+        )
+      );
+    },
+    [setEdges]
+  );
+
+  const onEdgeSelectByLabel = useCallback((edgeId: string) => {
+    setSelectedEdgeId(edgeId);
+    setSelectedNodeId(null);
+  }, []);
+
+  const edgeInteractionContext = useMemo(
+    () => ({
+      labelsDraggable: true,
+      onLabelOffsetCommit,
+      onEdgeSelectByLabel,
+      selectedEdgeId,
+    }),
+    [onLabelOffsetCommit, onEdgeSelectByLabel, selectedEdgeId]
+  );
+
+  const resetTransitionLabelPositions = useCallback(() => {
+    setEdges((eds) =>
+      eds.map((e) => {
+        const d = { ...(e.data as TmEdgeData) };
+        delete d.labelOffset;
+        return { ...e, data: d };
+      })
+    );
+  }, [setEdges]);
+
   const displayEdges: Edge<TmEdgeData>[] = useMemo(
     () =>
       edges.map((e) => ({
         ...e,
-        type: e.type ?? 'smoothstep',
+        type: 'tmTransition',
         label: formatEdgeRulesLabel(e.data as TmEdgeData | undefined),
         style: { stroke: '#64748b', strokeWidth: 2 },
         labelStyle: {
@@ -168,14 +227,18 @@ export function TmConstructionWorkspace() {
         const existing = eds.find((ed) => ed.source === src && ed.target === tgt);
         if (existing) {
           const prev = normalizeEdgeData(existing.data as TmEdgeData);
+          const prevFull = existing.data as TmEdgeData;
           const canon = canonicalEdgeId(src, tgt);
           return eds.map((ed) =>
             ed.id === existing.id
               ? {
                   ...ed,
                   id: canon,
-                  type: ed.type ?? 'smoothstep',
-                  data: { rules: [...prev.rules, newRule] },
+                  type: ed.type ?? 'tmTransition',
+                  data: {
+                    ...prevFull,
+                    rules: [...prev.rules, newRule],
+                  },
                 }
               : ed
           );
@@ -185,7 +248,7 @@ export function TmConstructionWorkspace() {
           {
             ...params,
             id,
-            type: 'smoothstep',
+            type: 'tmTransition',
             data: { rules: [newRule] },
           },
           eds
@@ -211,7 +274,15 @@ export function TmConstructionWorkspace() {
         return eds.filter((x) => x.id !== selectedEdgeId);
       }
       return eds.map((x) =>
-        x.id === selectedEdgeId ? { ...x, data: { rules: nextRules } } : x
+        x.id === selectedEdgeId
+          ? {
+              ...x,
+              data: {
+                ...(x.data as TmEdgeData),
+                rules: nextRules,
+              },
+            }
+          : x
       );
     });
   };
@@ -319,38 +390,71 @@ export function TmConstructionWorkspace() {
           Input alphabet: {challenge.inputAlphabet.join(', ')} · Blank on tape: ⊔ · Draw
           states and transitions; labels use read → write, move (L / R / S).
         </p>
+        {hasTutor ? (
+          <fieldset className="mt-3 flex flex-wrap gap-4 border-0 p-0 text-sm text-slate-300">
+            <legend className="sr-only">Construction workspace mode</legend>
+            <label className="inline-flex cursor-pointer items-center gap-2">
+              <input
+                type="radio"
+                name="construction-mode"
+                className="border-slate-600"
+                checked={workspaceMode === 'build'}
+                onChange={() => setWorkspaceMode('build')}
+              />
+              Build &amp; test (your diagram)
+            </label>
+            <label className="inline-flex cursor-pointer items-center gap-2">
+              <input
+                type="radio"
+                name="construction-mode"
+                className="border-slate-600"
+                checked={workspaceMode === 'tutor'}
+                onChange={() => setWorkspaceMode('tutor')}
+              />
+              Tutor mode (show solution)
+            </label>
+          </fieldset>
+        ) : null}
       </div>
 
+      {workspaceMode === 'tutor' && hasTutor ? (
+        <TmConstructionTutorPanel challenge={challenge} userLabelEdges={edges} />
+      ) : null}
+
+      {workspaceMode === 'build' ? (
       <div className="flex flex-col gap-4 lg:flex-row">
         <div className="min-h-[420px] flex-1 rounded-lg border border-slate-700 bg-slate-950">
-          <ReactFlow
-            nodes={nodes}
-            edges={displayEdges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            defaultEdgeOptions={{ type: 'smoothstep' }}
-            onNodeClick={(_, n) => {
-              setSelectedNodeId(n.id);
-              setSelectedEdgeId(null);
-            }}
-            onEdgeClick={(_, e) => {
-              setSelectedEdgeId(e.id);
-              setSelectedNodeId(null);
-            }}
-            onPaneClick={() => {
-              setSelectedNodeId(null);
-              setSelectedEdgeId(null);
-            }}
-            nodeTypes={NODE_TYPES}
-            deleteKeyCode={['Backspace', 'Delete']}
-            fitView
-            className="bg-slate-950"
-            proOptions={{ hideAttribution: true }}
-          >
-            <Background gap={16} color="#334155" />
-            <Controls className="!border-slate-600 !bg-slate-900 [&_button]:!border-slate-600 [&_button]:!bg-slate-800 [&_button]:!fill-slate-200" />
-          </ReactFlow>
+          <TmConstructionEdgeContext.Provider value={edgeInteractionContext}>
+            <ReactFlow
+              nodes={nodes}
+              edges={displayEdges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              defaultEdgeOptions={{ type: 'tmTransition' }}
+              onNodeClick={(_, n) => {
+                setSelectedNodeId(n.id);
+                setSelectedEdgeId(null);
+              }}
+              onEdgeClick={(_, e) => {
+                setSelectedEdgeId(e.id);
+                setSelectedNodeId(null);
+              }}
+              onPaneClick={() => {
+                setSelectedNodeId(null);
+                setSelectedEdgeId(null);
+              }}
+              nodeTypes={NODE_TYPES}
+              edgeTypes={EDGE_TYPES}
+              deleteKeyCode={['Backspace', 'Delete']}
+              fitView
+              className="bg-slate-950"
+              proOptions={{ hideAttribution: true }}
+            >
+              <Background gap={16} color="#334155" />
+              <Controls className="!border-slate-600 !bg-slate-900 [&_button]:!border-slate-600 [&_button]:!bg-slate-800 [&_button]:!fill-slate-200" />
+            </ReactFlow>
+          </TmConstructionEdgeContext.Provider>
         </div>
 
         <div className="w-full shrink-0 space-y-3 lg:w-72">
@@ -363,10 +467,18 @@ export function TmConstructionWorkspace() {
             >
               Add state
             </button>
+            <button
+              type="button"
+              className="mt-2 w-full rounded-md border border-slate-600 px-2 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
+              onClick={resetTransitionLabelPositions}
+            >
+              Reset transition label positions
+            </button>
             <p className="mt-2 text-[11px] text-slate-500">
               Drag from any source handle (lighter ring) to a target handle on another
               state. Reconnecting the same pair adds another rule to that edge. Select
-              an edge to edit its rules. Delete / Backspace removes the selection.
+              an edge to edit its rules. Drag a transition label chip to separate
+              overlapping labels. Delete / Backspace removes the selection.
             </p>
           </div>
 
@@ -491,7 +603,9 @@ export function TmConstructionWorkspace() {
           ) : null}
         </div>
       </div>
+      ) : null}
 
+      {workspaceMode === 'build' ? (
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -506,8 +620,9 @@ export function TmConstructionWorkspace() {
           <span className="font-mono">[TmConstruction] built definition</span>.
         </p>
       </div>
+      ) : null}
 
-      {buildErrors.length > 0 ? (
+      {workspaceMode === 'build' && buildErrors.length > 0 ? (
         <div
           className="rounded-lg border border-rose-700/50 bg-rose-950/30 p-3 text-sm text-rose-100"
           role="alert"
@@ -521,7 +636,7 @@ export function TmConstructionWorkspace() {
         </div>
       ) : null}
 
-      {resultsStale ? (
+      {workspaceMode === 'build' && resultsStale ? (
         <p
           className="rounded-md border border-sky-700/50 bg-sky-950/30 px-3 py-2 text-sm text-sky-100"
           role="status"
@@ -531,7 +646,7 @@ export function TmConstructionWorkspace() {
         </p>
       ) : null}
 
-      {statusLine ? (
+      {workspaceMode === 'build' && statusLine ? (
         <p
           className={`rounded-md px-3 py-2 text-sm ${
             allConstructionTestsPassed(results!)
@@ -544,7 +659,7 @@ export function TmConstructionWorkspace() {
         </p>
       ) : null}
 
-      {results ? (
+      {workspaceMode === 'build' && results ? (
         <div className="overflow-x-auto rounded-lg border border-slate-700">
           <p className="border-b border-slate-700 bg-slate-900/90 px-3 py-2 text-xs text-slate-400">
             <span className="font-medium text-slate-300">How grading works:</span> accept
@@ -587,7 +702,7 @@ export function TmConstructionWorkspace() {
         </div>
       ) : null}
 
-      {results?.some((r) => !r.passed) ? (
+      {workspaceMode === 'build' && results?.some((r) => !r.passed) ? (
         <details className="rounded-lg border border-slate-700 bg-slate-900/50 p-3 text-sm text-slate-300">
           <summary className="cursor-pointer text-slate-200">
             Show short traces for failed tests

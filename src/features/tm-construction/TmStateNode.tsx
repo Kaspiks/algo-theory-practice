@@ -7,6 +7,17 @@ const handleClass =
 export function TmStateNode({ data, selected }: NodeProps) {
   const d = data as TmStateNodeData;
   const ring = selected ? 'ring-2 ring-amber-400/80' : '';
+  const tutorRing = d.tutorSpotlight
+    ? 'ring-2 ring-sky-400/90 shadow-[0_0_22px_rgba(56,189,248,0.35)]'
+    : '';
+  const runRing = d.runHaltAccept
+    ? 'ring-2 ring-emerald-400/95 shadow-[0_0_24px_rgba(52,211,153,0.4)]'
+    : d.runHaltReject
+      ? 'ring-2 ring-rose-400/95 shadow-[0_0_24px_rgba(251,113,133,0.4)]'
+      : d.runCurrent
+        ? 'ring-2 ring-amber-400/95 tm-construction-run-node-pulse'
+        : '';
+  const dim = d.tutorDim || d.runDim ? 'opacity-[0.38]' : '';
   const kindBorder =
     d.kind === 'accept'
       ? 'border-emerald-500/80'
@@ -27,7 +38,7 @@ export function TmStateNode({ data, selected }: NodeProps) {
 
   return (
     <div
-      className={`relative min-w-[5.5rem] rounded-lg border-2 bg-slate-900/95 px-2 py-2 text-center shadow-md ${kindBorder} ${ring}`}
+      className={`relative min-w-[5.5rem] rounded-lg border-2 bg-slate-900/95 px-2 py-2 text-center shadow-md transition-[opacity,box-shadow] duration-300 ${kindBorder} ${ring} ${tutorRing} ${runRing} ${dim}`}
     >
       {/* Top: incoming left, outgoing right */}
       <Handle
