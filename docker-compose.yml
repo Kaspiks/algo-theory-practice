@@ -12,6 +12,8 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
+    env_file:
+      - .env
     environment:
       # Improves file watch reliability on some Docker Desktop / VM setups
       CHOKIDAR_USEPOLLING: "true"
