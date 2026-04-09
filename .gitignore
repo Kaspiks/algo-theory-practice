@@ -5,6 +5,8 @@ dist/
 # Local / editor
 .DS_Store
 .cursor/
+.idea/
+.claude/
 
 # Env
 .env
