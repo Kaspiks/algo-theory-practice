@@ -6,6 +6,11 @@ export interface GeminiTransition {
   move: 'L' | 'R' | 'S';
 }
 
+export interface GeminiTestCase {
+  input: string;
+  expect: 'accept' | 'reject';
+}
+
 export interface GeminiTMResponse {
   states: string[];
   inputAlphabet: string[];
@@ -14,6 +19,7 @@ export interface GeminiTMResponse {
   acceptState: string;
   rejectState: string;
   transitions: GeminiTransition[];
+  tests: GeminiTestCase[];
 }
 
 export type GeminiResult =
@@ -31,6 +37,10 @@ const SYSTEM_PROMPT = `You are a Turing Machine designer. When given a descripti
   "rejectState": "qReject",
   "transitions": [
     { "from": "q0", "read": "a", "to": "q1", "write": "X", "move": "R" }
+  ],
+  "tests": [
+    { "input": "ab", "expect": "accept" },
+    { "input": "a", "expect": "reject" }
   ]
 }
 
@@ -41,6 +51,7 @@ Rules:
 - acceptState and rejectState must be in the states array
 - startState must be in the states array
 - Include a transition for every (state, symbol) pair that can be reached — the machine must be total on the states and tape alphabet it uses
+- The tests array must contain exactly 8 test cases that together provide good coverage: include edge cases, typical accept cases, and typical reject cases. Use "" for the empty string input.
 - If you cannot generate a valid Turing Machine from the description, respond with exactly: {"error": "Could not generate a valid Turing Machine from this description."}
 - Do NOT include any text, markdown, or code fences — only raw JSON`;
 

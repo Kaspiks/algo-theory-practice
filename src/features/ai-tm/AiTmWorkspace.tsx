@@ -159,7 +159,13 @@ export function AiTmWorkspace() {
       setNodes(newNodes);
       setEdges(newEdges);
       setHasGenerated(true);
-      setTestRows([]);
+      setTestRows(
+        (geminiMachine.tests ?? []).map((t) => ({
+          id: newId(),
+          input: t.input,
+          expect: t.expect,
+        }))
+      );
 
       const constructionInput = geminiToConstructionInput(geminiMachine);
       const built = buildMachineFromConstruction(constructionInput);
