@@ -31,7 +31,7 @@ export function GeminiGeneratorPanel({ onLoad }: GeminiGeneratorPanelProps) {
       return;
     }
 
-    const { nodes, edges } = geminiToFlow(result.machine);
+    const { nodes, edges } = await geminiToFlow(result.machine);
     onLoad(nodes, edges, result.machine);
     setLoading(false);
   };
