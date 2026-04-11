@@ -9,9 +9,10 @@ import { LanguageDecodePlayer } from '@/features/exercise-player/LanguageDecodeP
 import { MvpPlayer } from '@/features/exercise-player/MvpPlayer';
 import type { PlayerMode } from '@/features/exercise-player/MvpPlayer';
 import { TmConstructionWorkspace } from '@/features/tm-construction/TmConstructionWorkspace';
+import { AiTmWorkspace } from '@/features/ai-tm/AiTmWorkspace';
 import type { ExerciseCategory } from '@/types/mvp';
 
-type AppView = 'pack' | 'construction';
+type AppView = 'pack' | 'construction' | 'ai';
 
 const CATEGORY_ORDER: ExerciseCategory[] = [
   'tm_basics',
@@ -110,6 +111,16 @@ export function App() {
             />
             TM construction (draw & test)
           </label>
+          <label className="inline-flex cursor-pointer items-center gap-2">
+            <input
+              type="radio"
+              name="app-view"
+              className="border-slate-600"
+              checked={appView === 'ai'}
+              onChange={() => setAppView('ai')}
+            />
+            AI generator ✨
+          </label>
         </fieldset>
         {appView === 'pack' ? (
           <>
@@ -161,16 +172,22 @@ export function App() {
               </select>
             </div>
           </>
-        ) : (
+        ) : appView === 'construction' ? (
           <p className="mt-3 text-sm text-slate-400">
             Draw states and transitions, then run behavioral tests for the selected
             language.
+          </p>
+        ) : (
+          <p className="mt-3 text-sm text-slate-400">
+            Describe a Turing Machine in plain English — Gemini generates it, you test it.
           </p>
         )}
       </header>
       <main className="mx-auto max-w-5xl p-6">
         {appView === 'construction' ? (
           <TmConstructionWorkspace />
+        ) : appView === 'ai' ? (
+          <AiTmWorkspace />
         ) : exercise.mode === 'language_decode' ? (
           <LanguageDecodePlayer
             key={exercise.id}

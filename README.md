@@ -11,6 +11,20 @@ Interactive practice for theory-of-computation courses.
 
 ---
 
+## Environment setup
+
+The app requires a Gemini API key for the **AI Generator** mode.
+
+```bash
+cp .env.dist .env
+# then open .env and set VITE_GEMINI_API_KEY to your key
+```
+
+Get a free key at **https://aistudio.google.com/app/apikey**.  
+`.env` is git-ignored — never commit it. `.env.dist` is the committed template.
+
+---
+
 ## Local development (without Docker)
 
 ```bash
